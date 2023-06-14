@@ -336,3 +336,4 @@ pip-selfcheck.json
 config.py
 *.db
 *.sqlite[3]
+*.*_devices
