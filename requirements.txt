@@ -1,1 +1,2 @@
-git+https://github.com/EEKIM10/niobot.git@master
+git+https://github.com/EEKIM10/niobot.git@master#egg=e2ee
+yt_dlp

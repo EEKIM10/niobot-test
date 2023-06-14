@@ -8,16 +8,19 @@ import nio
 import niobot
 from niobot import Context, NioBotException, MediaAttachment
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=getattr(config, "LOG_LEVEL", logging.INFO))
+logging.getLogger("peewee").setLevel(logging.INFO)
 
 
 bot = niobot.NioBot(
-    "https://matrix.nexy7574.co.uk",
-    "@jimmy-bot:nexy7574.co.uk",
-    "nio-bot-test",
-    command_prefix="?",
-    owner_id="@nex:nexy7574.co.uk"
+    getattr(config, "HOMESERVER", "https://matrix.nexy7574.co.uk"),
+    getattr(config, "USER_ID", "@jimmy-bot:nexy7574.co.uk"),
+    getattr(config, "DEVICE_ID", "nio-bot-test"),
+    command_prefix=getattr(config, "COMMAND_PREFIX", "?"),
+    owner_id=getattr(config, "OWNER_ID", "@nex:nexy7574.co.uk"),
+    store_path=getattr(config, "STORE_PATH", "./store"),
 )
+bot.mount_module("modules.ytdl")
 
 
 @bot.on_event("ready")
@@ -79,4 +82,4 @@ async def hello(ctx: Context):
 
 
 bot.mount_module("module_test")
-bot.run(access_token=config.TOKEN)
+bot.run(access_token=getattr(config, "TOKEN", None), password=getattr(config, "PASSWORD", None))
