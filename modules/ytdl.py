@@ -143,7 +143,7 @@ class YoutubeDownloadModule(niobot.Module):
 
         args = args.copy()  # disown original
         url = args.pop(0)
-        dl_format = "(bv+ba/b)[filesize<100M]/b"
+        dl_format = "(bv+ba/b)[filesize<80M]/b"  # 
         if args:
             dl_format = args.pop(0)
 
@@ -178,6 +178,7 @@ class YoutubeDownloadModule(niobot.Module):
                     await self.client.edit_message(
                         room, msg_id, "Uploading %s (%dMb, %s)..." % (file.name, size_mb, resolution)
                     )
+                    self.log.info("Uploading %s (%dMb, %s)", file.name, size_mb, resolution)
                     upload = await niobot.MediaAttachment.from_file(
                         file,
                     )
