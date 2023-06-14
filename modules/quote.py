@@ -15,7 +15,7 @@ class QuoteModule(niobot.Module):
                 if response.status_code != 200:
                     await ctx.reply("Something happened!")
                     return
-                url = response.content
+                url = response.text
                 response = await client.get(url)
                 if response.status_code != 200:
                     await ctx.reply("Something happened and nearly succeeded!")
