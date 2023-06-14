@@ -21,6 +21,7 @@ bot = niobot.NioBot(
     store_path=getattr(config, "STORE_PATH", "./store"),
 )
 bot.mount_module("modules.ytdl")
+bot.mount_module("modules.quote")
 
 
 @bot.on_event("ready")

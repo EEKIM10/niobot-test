@@ -1,2 +1,3 @@
-git+https://github.com/EEKIM10/niobot.git@master#egg=e2ee
+nio-bot[e2ee] @ git+https://github.com/EEKIM10/niobot.git@master
 yt_dlp
+httpx>=0.24.1
