@@ -85,9 +85,9 @@ async def hello(ctx: Context):
     try:
         _, msg = await bot.wait_for_message(sender=ctx.message.sender, room_id=ctx.room.room_id, timeout=10)
     except asyncio.TimeoutError:
-        await bot.edit_message(ctx.room, res.event_id, "You took too long to respond!")
+        await res.edit("You took too long to respond!")
     else:
-        await bot.edit_message(ctx.room, res.event_id, f"Hello, {msg.body}!")
+        await res.edit(f"Hello, {msg.body}!")
 
 
 bot.mount_module("module_test")
