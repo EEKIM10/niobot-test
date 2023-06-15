@@ -20,6 +20,7 @@ bot = niobot.NioBot(
     owner_id=getattr(config, "OWNER_ID", "@nex:nexy7574.co.uk"),
     store_path=getattr(config, "STORE_PATH", "./store"),
 )
+bot.ping_history = []
 bot.mount_module("modules.ytdl")
 bot.mount_module("modules.quote")
 
@@ -27,14 +28,21 @@ bot.mount_module("modules.quote")
 @bot.on_event("ready")
 async def on_ready(first_sync_result: nio.SyncResponse):
     print("Logged in as %r!" % bot.user_id)
+    print("Access token: %s" % bot.access_token)
+
+
+@bot.on_event("message")
+async def on_message(room: nio.MatrixRoom, event: nio.RoomMessageText):
+    latency = bot.latency(event)
+    bot.ping_history.append(latency)
 
 
 @bot.command()
 async def ping(ctx: Context):
-    """SHows the roundtrip latency"""
-    logging.info("timestamp now is %s" % time.time())
-    latency = time.time() - ctx.message.server_timestamp / 1000
-    await ctx.reply(f"Pong! {latency:.2f}s")
+    """Shows the roundtrip latency"""
+    latency = ctx.latency
+    average = sum(bot.ping_history) / len(bot.ping_history)
+    await ctx.respond(f"Pong! {latency:.2f}ms (Average {average:.2f}ms)")
 
 
 @bot.command()
@@ -45,12 +53,12 @@ async def cud(ctx: Context):
     try:
         await ctx.client.edit_message(ctx.room, msg.event_id, "Goodbye, World!")
     except NioBotException as e:
-        await ctx.reply(f"Failed to edit message: {e!r}")
+        await ctx.respond(f"Failed to edit message: {e!r}")
     await asyncio.sleep(1)
     try:
         await ctx.client.delete_message(ctx.room, msg.event_id)
     except NioBotException as e:
-        await ctx.reply(f"Failed to delete message: {e!r}")
+        await ctx.respond(f"Failed to delete message: {e!r}")
 
 
 @bot.command()
@@ -58,22 +66,22 @@ async def echo(ctx: Context):
     """Echos back your arguments"""
     content = ctx.args
     content = [x.replace("@", "@\u200b") for x in content]
-    await ctx.reply("Your arguments: %s" % ', '.join(repr(x) for x in content))
+    await ctx.respond("Your arguments: %s" % ', '.join(repr(x) for x in content))
 
 
 @bot.command(name="upload-image")
 async def upload_image(ctx: Context):
     """Uploads an image"""
     try:
-        await ctx.reply("image.jpg", file=await MediaAttachment.from_file('./image.jpg'))
+        await ctx.respond("image.jpg", file=await MediaAttachment.from_file('./image.jpg'))
     except NioBotException as e:
-        await ctx.reply("Failed to upload image: %r" % e)
+        await ctx.respond("Failed to upload image: %r" % e)
 
 
 @bot.command()
 async def hello(ctx: Context):
     """Asks for an input"""
-    res = await ctx.reply("Hello, what is your name?")
+    res = await ctx.respond("Hello, what is your name?")
     try:
         _, msg = await bot.wait_for_message(sender=ctx.message.sender, room_id=ctx.room.room_id, timeout=10)
     except asyncio.TimeoutError:

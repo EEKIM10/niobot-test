@@ -138,7 +138,7 @@ class YoutubeDownloadModule(niobot.Module):
         room = ctx.room
         event = ctx.event
         if not args:
-            await ctx.reply("Usage: !ytdl <url> [format]")
+            await ctx.respond("Usage: !ytdl <url> [format]")
             return
 
         args = args.copy()  # disown original
@@ -147,19 +147,14 @@ class YoutubeDownloadModule(niobot.Module):
         if args:
             dl_format = args.pop(0)
 
-        msg = await ctx.reply("Downloading...")
-        msg = msg_id = msg.event_id
+        msg = await ctx.respond("Downloading...")
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 info = await self.get_video_info(url)
                 if not info:
-                    await ctx.client.edit_message(room, msg_id, "Could not get video info (Restricted?)")
+                    await msg.edit("Could not get video info (Restricted?)")
                     return
-                await ctx.client.edit_message(
-                    room,
-                    msg_id,
-                    "Downloading [%r](%s)..." % (info["title"], info["original_url"]),
-                )
+                await msg.edit("Downloading [%r](%s)..." % (info["title"], info["original_url"]))
                 self.log.info("Downloading %s to %s", url, temp_dir)
                 loop = asyncio.get_event_loop()
                 files = await loop.run_in_executor(
@@ -168,16 +163,14 @@ class YoutubeDownloadModule(niobot.Module):
                 )
                 self.log.info("Downloaded %d files", len(files))
                 if not files:
-                    await self.client.edit_message(room, msg_id, "No files downloaded")
+                    await msg.edit("No files downloaded")
                     return
                 sent = False
                 for file in files:
                     data = self.get_metadata(file)
                     size_mb = file.stat().st_size / 1024 / 1024
                     resolution = "%dx%d" % (data["streams"][0]["width"], data["streams"][0]["height"])
-                    await self.client.edit_message(
-                        room, msg_id, "Uploading %s (%dMb, %s)..." % (file.name, size_mb, resolution)
-                    )
+                    await msg.edit("Uploading %s (%dMb, %s)..." % (file.name, size_mb, resolution))
                     self.log.info("Uploading %s (%dMb, %s)", file.name, size_mb, resolution)
                     upload = await niobot.MediaAttachment.from_file(
                         file,
@@ -186,19 +179,15 @@ class YoutubeDownloadModule(niobot.Module):
                         await self.client.send_message(room, content=file.name, file=upload)
                     except Exception as e:
                         self.log.error("Error: %s", e, exc_info=e)
-                        await self.client.edit_message(room, msg_id, "Error: " + str(e))
+                        await msg.edit("Error: %r" % e)
                         return
                     sent = True
 
                 if sent:
-                    await self.client.edit_message(
-                        room,
-                        msg_id,
-                        "Completed, downloaded [your video]({})".format("url"),
-                    )
+                    await msg.edit("Completed, downloaded [your video]({})".format("url"))
                     await asyncio.sleep(10)
-                    await self.client.room_redact(room.room_id, msg_id, reason="Command completed.")
+                    await msg.delete("Command completed.")
         except Exception as e:
             self.log.error("Error: %s", e, exc_info=e)
-            await self.client.edit_message(room, event, "Error: " + str(e))
+            await msg.edit("Error: " + str(e))
             return
