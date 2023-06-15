@@ -1,3 +1,8 @@
+pip>=20
+# ^ Pip needs to be able to reliably parse the below:
 nio-bot[e2ee] @ git+https://github.com/EEKIM10/niobot.git@master
 yt_dlp
 httpx>=0.24.1
+psutil>=5.9.5
+humanize>=4.6.0
+beautifulsoup4>=4.12.2
