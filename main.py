@@ -91,14 +91,14 @@ bot.add_event_callback(handle_key_verification_start, (nio.KeyVerificationEvent,
 
 
 @bot.on_event("ready")
-async def on_ready(first_sync_result: nio.SyncResponse):
+async def on_ready(_):
     bot.queue.start_worker()
     print("Logged in as %r!" % bot.user_id)
     print("Access token: %s" % bot.access_token)
 
 
 @bot.on_event("message")
-async def on_message(room: nio.MatrixRoom, event: nio.RoomMessageText):
+async def on_message(_, event: nio.RoomMessageText):
     if bot.is_old(event):
         return
     latency = bot.latency(event)
@@ -110,7 +110,12 @@ async def ping(ctx: Context):
     """Shows the roundtrip latency"""
     latency = ctx.latency
     average = sum(bot.ping_history) / len(bot.ping_history)
-    await ctx.respond(f"Pong! {latency:.2f}ms (Average {average:.2f}ms)")
+    start = time.time()
+    msg = await ctx.respond(f"Pong! {latency:.2f}ms (Average {average:.2f}ms)")
+    end = time.time()
+    await msg.edit(
+        content=f"Pong! {latency:.2f}ms (Average {average:.2f}ms) (Reply time: {end - start:.2f}ms)"
+    )
 
 
 @bot.command()
