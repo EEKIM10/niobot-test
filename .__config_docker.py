@@ -4,7 +4,7 @@ import logging
 
 TOKEN = os.environ["token"]
 PASSWORD = os.environ["password"]
-PREFIX = os.getenv("prefix", "?")
+COMMAND_PREFIX = os.getenv("prefix", "?")
 STORE_PATH = os.getenv("store_path", "/data" if os.path.exists("/data") else "./store")
 LOG_LEVEL = getattr(logging, os.getenv("log_level", "INFO"))
 OWNER_ID = os.getenv("owner_id", "@nex:nexy7574.co.uk")
