@@ -1,5 +1,10 @@
 import collections
+import contextlib
+import io
 import os
+import shutil
+import subprocess
+import textwrap
 import time
 from datetime import timedelta
 
@@ -94,7 +99,9 @@ bot.add_event_callback(handle_key_verification_start, (nio.KeyVerificationEvent,
 async def on_ready(_):
     bot.queue.start_worker()
     print("Logged in as %r!" % bot.user_id)
-    print("Access token: %s" % bot.access_token)
+    print("Prefix:", bot.command_prefix)
+    print("Owner:", bot.owner_id)
+    print("Device:", bot.device_id)
 
 
 @bot.on_event("message")
@@ -173,14 +180,6 @@ async def cud(ctx: Context):
         await ctx.respond(f"Failed to delete message: {e!r}")
 
 
-@bot.command()
-async def echo(ctx: Context):
-    """Echos back your arguments"""
-    content = ctx.args
-    content = [x.replace("@", "@\u200b") for x in content]
-    await ctx.respond("Your arguments: %s" % ', '.join(repr(x) for x in content))
-
-
 @bot.command(name="upload-image")
 async def upload_image(ctx: Context):
     """Uploads an image"""
@@ -201,6 +200,82 @@ async def hello(ctx: Context):
     else:
         await res.edit(f"Hello, {msg.body}!")
 
+
+@bot.command(arguments=[niobot.Argument("simple", bool, default=False, parser=niobot.boolean_parser)])
+async def version(ctx: Context, simple: bool = False):
+    """Shows the version of nio"""
+    # if shutil.which("niocli"):
+    if not simple and shutil.which("niocli"):
+        result = await niobot.run_blocking(
+            subprocess.run,
+            ("niocli", "version"),
+            text=True,
+            capture_output=True,
+        )
+        await ctx.respond("```\n%s\n```" % result.stdout.strip())
+    else:
+        try:
+            from niobot import __version__ as ver
+        except ImportError:
+            await ctx.respond("`niocli`` is not installed (Version too old? PATH issue?)\n"
+                              "Might be an ancient build, there's no \\_\\_version\\_\\_ either.")
+        else:
+            URL = "https://github.com/EEKIM10/nio-bot"
+            await ctx.respond(
+                "Running [nio-bot]({0}) version [{2}]({0}/tree/{1}).".format(
+                    URL,
+                    ver.__version_tuple__[-1].split(".")[0][1:],
+                    ver.__version__,
+                ),
+            )
+
+
+@bot.command(name="pretty-print", aliases=['pp'], arguments=[niobot.Argument("code", str, parser=niobot.json_parser)])
+def pretty_print(ctx: Context, code: str):
+    """Pretty prints given JSON"""
+    import json
+    try:
+        code = json.dumps(code, indent=4)
+    except json.JSONDecodeError:
+        pass
+    return ctx.respond("```\n%s\n```" % code)
+
+
+@bot.command(name="eval")
+async def eval_(ctx: Context):
+    """Evaluates Python code"""
+    if ctx.message.sender != bot.owner_id:
+        return await ctx.respond("You are not my owner!")
+
+    out = io.StringIO()
+    stripped = ctx.message.body[len(bot.command_prefix + "eval"):].strip()
+    if stripped.startswith(("```", "```py")):
+        stripped = "\n".join(stripped.split("\n")[1:-1])
+    elif stripped.startswith("`") and stripped.endswith("`"):
+        stripped = stripped[1:-1]
+
+    if stripped.startswith("await") or stripped.startswith("#!/async"):
+        stripped = "async def __eval_func():\n" + textwrap.indent(stripped, "    ")
+        stripped += "\n\nwait_for = loop.create_task(__eval_func())"
+
+    with contextlib.redirect_stdout(out) as stdout:
+        _r = await ctx.respond("Evaluating...\n```py\n%s\n```" % stripped)
+        _locals = {**globals(), **locals(), "ctx": ctx, "loop": asyncio.get_event_loop()}
+        try:
+            start = time.time()
+            await niobot.run_blocking(exec, stripped, globals(), _locals)
+            end = time.time()
+        except Exception as e:
+            await _r.edit(f"```py\n{e!r}\n```")
+        else:
+            if _locals.get("wait_for"):
+                result = await _locals["wait_for"]
+                print("<awaited result: %r>" % result, file=out)
+            value = stdout.getvalue().strip()
+            if value:
+                await _r.edit(f"```py\n{value}\n```\nEvaluation took: {end - start:.1f} seconds.")
+            else:
+                await _r.edit(f"```py\n<No output>\n```\nEvaluation took: {end - start:.1f} seconds.")
 
 bot.mount_module("module_test")
 bot.run(access_token=getattr(config, "TOKEN", None), password=getattr(config, "PASSWORD", None))

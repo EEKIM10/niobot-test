@@ -4,6 +4,7 @@ import asyncio
 import niobot
 import subprocess
 from functools import partial
+from niobot.commands import Argument
 
 import nio
 import aiofiles
@@ -130,22 +131,36 @@ class YoutubeDownloadModule(niobot.Module):
         "ytdl",
         help="Downloads a video from YouTube", 
         aliases=['yt', 'dl', 'yl-dl', 'yt-dlp'], 
-        usage="<url> [format]"
+        usage="<url> [format]",
+        arguments=[
+            niobot.commands.Argument(
+                "url",
+                str,
+                description="The URL to download.",
+                required=True,
+            ),
+            niobot.commands.Argument(
+                "_format",
+                str,
+                description="The format to download in.",
+                required=False,
+                default="(bv+ba/b)[filesize<80M]/b"
+            ),
+        ]
     )
-    async def ytdl(self, ctx: niobot.Context):
+    async def ytdl(self, ctx: niobot.Context, url: str = None, _format: str = None):
         """Downloads a video from YouTube"""
         args = ctx.args
         room = ctx.room
-        event = ctx.event
         if not args:
-            await ctx.respond("Usage: !ytdl <url> [format]")
+            await ctx.respond("Usage: ?ytdl <url> [format]")
             return
 
         args = args.copy()  # disown original
-        url = args.pop(0)
-        dl_format = "(bv+ba/b)[filesize<80M]/b"  # 
+        url = url or args.pop(0)
+        dl_format = _format or "(bv+ba/b)[filesize<80M]/b"  #
         if args:
-            dl_format = args.pop(0)
+            dl_format = _format or args.pop(0)
 
         msg = await ctx.respond("Downloading...")
         try:
