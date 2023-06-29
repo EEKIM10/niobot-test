@@ -50,7 +50,7 @@ class QuoteModule(niobot.Module):
                                     args = (payload["content"],)
                                 else:
                                     text = "**%s**:<br><blockquote>%s</blockquote>"
-                                    arsg = (payload["author"], payload["content"])
+                                    args = (payload["author"], payload["content"])
                                 y = await self.bot.send_message(
                                     room,
                                     text % args,
