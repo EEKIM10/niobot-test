@@ -119,7 +119,7 @@ class QuoteModule(niobot.Module):
                     "message": event.body
                 }
                 if isinstance(event, RoomMessageImage):
-                    payload["message"] = event.url
+                    payload["message"] = self.bot.mxc_to_http(event.url)
                 async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__()}) as client:
                     self.log.debug("Sending message to discord bridge")
                     async with client.post(
