@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import textwrap
+import pathlib
 import time
 from datetime import timedelta
 
@@ -18,7 +19,9 @@ import nio
 import humanize
 import niobot
 from bs4 import BeautifulSoup
-from niobot import Context, NioBotException, MediaAttachment
+from niobot import Context, NioBotException, MediaAttachment, FileAttachment
+
+os.chdir(pathlib.Path(__file__).parent.absolute())
 
 logging.basicConfig(level=getattr(config, "LOG_LEVEL", logging.INFO))
 logging.getLogger("peewee").setLevel(logging.INFO)
@@ -98,11 +101,26 @@ bot.add_event_callback(handle_key_verification_start, (nio.KeyVerificationEvent,
 @bot.on_event("ready")
 async def on_ready(_):
     bot.queue.start_worker()
-    bot.mount_module("modules.discord_bridge")
+    try:
+        from config import DISCORD_BRIDGE_TOKEN
+    except ImportError:
+        print("No loading discord bridge module, DISCORD_BRIDGE_TOKEN is not in config.py")
+    else:
+        bot.mount_module("modules.discord_bridge")
     print("Logged in as %r!" % bot.user_id)
     print("Prefix:", bot.command_prefix)
     print("Owner:", bot.owner_id)
     print("Device:", bot.device_id)
+
+
+@bot.on_event("command_error")
+async def on_command_error(ctx: Context, error: Exception):
+    if isinstance(error, niobot.CommandArgumentsError):
+        await ctx.respond("Invalid arguments: " + str(error))
+    elif isinstance(error, niobot.CommandDisabledError):
+        await ctx.respond("Command disabled: " + str(error))
+    else:
+        await ctx.respond("Error: " + str(error))
 
 
 @bot.on_event("message")
@@ -181,13 +199,38 @@ async def cud(ctx: Context):
         await ctx.respond(f"Failed to delete message: {e!r}")
 
 
-@bot.command(name="upload-image")
-async def upload_image(ctx: Context):
+@bot.command(name="upload", usage="<type: image|video|audio|file>", arguments=[niobot.Argument("type", str)])
+async def upload_attachment(ctx: Context, _type: str):
     """Uploads an image"""
+    attachment = None
     try:
-        await ctx.respond("image.jpg", file=await MediaAttachment.from_file('./image.jpg'))
+        match _type:
+            case "image":
+                attachment = await MediaAttachment.from_file('./assets/image.jpg')
+            case "video":
+                attachment = await MediaAttachment.from_file('./assets/bee-movie.webm')
+            case "audio":
+                attachment = await MediaAttachment.from_file('./assets/zombo_words.mp3')
+            case "file":
+                attachment = FileAttachment('./assets/Manifesto.pdf')
+            case _:
+                pass
+    except Exception as e:
+        await ctx.respond(f"Failed to upload attachment: {e!r}")
+        return
+    if attachment is None:
+        await ctx.respond("Invalid attachment type. Please pick one of image, video, audio, or file.")
+        return
+    msg = await ctx.respond("Uploading attachment...")
+    try:
+        fn = getattr(attachment.file, 'name', attachment.media_type + '.' + attachment.mime.split("/")[-1])
+        await ctx.respond(fn, file=attachment)
     except NioBotException as e:
-        await ctx.respond("Failed to upload image: %r" % e)
+        await msg.edit(f"Failed to upload attachment: {e!r}")
+        return
+    await msg.edit("Attachment uploaded!")
+    await asyncio.sleep(5)
+    await msg.delete()
 
 
 @bot.command()
@@ -205,7 +248,6 @@ async def hello(ctx: Context):
 @bot.command(arguments=[niobot.Argument("simple", bool, default=False, parser=niobot.boolean_parser)])
 async def version(ctx: Context, simple: bool = False):
     """Shows the version of nio"""
-    # if shutil.which("niocli"):
     if not simple and shutil.which("niocli"):
         result = await niobot.run_blocking(
             subprocess.run,
@@ -218,7 +260,7 @@ async def version(ctx: Context, simple: bool = False):
         try:
             from niobot import __version__ as ver
         except ImportError:
-            await ctx.respond("`niocli`` is not installed (Version too old? PATH issue?)\n"
+            await ctx.respond("`niocli` is not installed (Version too old? PATH issue?)\n"
                               "Might be an ancient build, there's no \\_\\_version\\_\\_ either.")
         else:
             URL = "https://github.com/EEKIM10/nio-bot"
@@ -278,5 +320,4 @@ async def eval_(ctx: Context):
             else:
                 await _r.edit(f"```py\n<No output>\n```\nEvaluation took: {end - start:.1f} seconds.")
 
-bot.mount_module("module_test")
 bot.run(access_token=getattr(config, "TOKEN", None), password=getattr(config, "PASSWORD", None))
