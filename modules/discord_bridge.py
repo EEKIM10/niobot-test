@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import json
 import websockets
 import aiohttp
@@ -19,6 +20,8 @@ class QuoteModule(niobot.Module):
         self.bot.add_event_callback(self.on_message, (RoomMessageText, RoomMessageImage))
         self.fifo_task = asyncio.create_task(self.message_poller())
         self.last_author: str = "@jimmy-bot:nexy7574.co.uk"
+        self.bridge_responses = collections.deque(maxlen=100)
+        self.bridge_lock = asyncio.Lock()
 
     async def message_poller(self):
         if not DISCORD_BRIDGE_TOKEN:
@@ -42,13 +45,18 @@ class QuoteModule(niobot.Module):
                             _author = self.last_author
                             self.last_author = payload["author"]
                             if payload["content"]:
-                                await self.bot.send_message(
+                                if _author == payload["author"]:
+                                    text = "<blockquote>%s</blockquote>"
+                                else:
+                                    text = "**%s**:<br><blockquote>%s</blockquote>"
+                                y = await self.bot.send_message(
                                     room,
-                                    "**%s**:<br><blockquote>%s</blockquote>" % (
+                                    text % (
                                         payload["author"], payload["content"]
                                     ),
                                     message_type="m.text"
                                 )
+                                self.bridge_responses.append(y.event_id)
 
                             if payload["attachments"]:
                                 for attachment in payload["attachments"]:
@@ -69,11 +77,12 @@ class QuoteModule(niobot.Module):
                                                     height=attachment["height"],
                                                     width=attachment["width"],
                                                 )
-                                                await self.bot.send_message(
+                                                x = await self.bot.send_message(
                                                     room,
-                                                    attachment["filename"],
+                                                    'BRIDGE_' + attachment["filename"],
                                                     file=media
                                                 )
+                                                self.bridge_responses.append(x.event_id)
                                     except Exception as e:
                                         self.log.exception("Error while mirroring discord media: %r", e, exc_info=e)
                                         continue
@@ -83,48 +92,51 @@ class QuoteModule(niobot.Module):
 
     # @niobot.event("message")
     async def on_message(self, room: MatrixRoom, event: RoomMessageText | RoomMessageImage):
-        self.log.debug("Processing message: %s in %s", event, room)
-        if self.bot.is_old(event):
-            self.log.debug("Ignoring old message: %s in %s", event, room)
-            return
+        async with self.bridge_lock:
+            self.log.debug("Processing message: %s in %s", event, room)
+            if self.bot.is_old(event):
+                self.log.debug("Ignoring old message: %s in %s", event, room)
+                return
 
-        if room.room_id != "!WrLNqENUnEZvLJiHsu:nexy7574.co.uk":
-            self.log.debug("Ignoring message in %s", room)
-            return
+            if room.room_id != "!WrLNqENUnEZvLJiHsu:nexy7574.co.uk":
+                self.log.debug("Ignoring message in %s", room)
+                return
 
-        if event.body.startswith("~"):
-            self.log.debug("Ignoring escaped message: %s", event)
-            return
+            if event.body.startswith("~"):
+                self.log.debug("Ignoring escaped message: %s", event)
+                return
 
-        if event.sender == self.bot.user_id:
-            self.log.debug("Ignoring message from self: %s", event)
-            return
+            if event.sender == self.bot.user_id and event.event_id in self.bridge_responses:
+                self.log.debug("Ignoring message from self: %s", event)
+                return
 
-        if DISCORD_BRIDGE_TOKEN:
-            payload = {
-                "secret": DISCORD_BRIDGE_TOKEN,
-                "sender": event.sender,
-                "message": event.body
-            }
-            if isinstance(event, RoomMessageImage):
-                payload["message"] = event.url
-            async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__()}) as client:
-                self.log.debug("Sending message to discord bridge")
-                async with client.post(
-                    "https://droplet.nexy7574.co.uk/jimmy/bridge",
-                    json=payload,
-                    headers={
-                        "Connection": "Close"
-                    },
-                    timeout=aiohttp.ClientTimeout(total=5)
-                ) as response:
-                    if response.status != 200:
-                        self.log.error(
-                            "Error while sending message to discord bridge (%d): %s",
-                            response.status,
-                            await response.text()
-                        )
-                        return
-                    self.log.info("Message sent to discord bridge")
-        else:
-            self.log.debug("No discord bridge token set, ignoring message")
+            self.bridge_responses.append(event.event_id)
+
+            if DISCORD_BRIDGE_TOKEN:
+                payload = {
+                    "secret": DISCORD_BRIDGE_TOKEN,
+                    "sender": event.sender,
+                    "message": event.body
+                }
+                if isinstance(event, RoomMessageImage):
+                    payload["message"] = event.url
+                async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__()}) as client:
+                    self.log.debug("Sending message to discord bridge")
+                    async with client.post(
+                        "https://droplet.nexy7574.co.uk/jimmy/bridge",
+                        json=payload,
+                        headers={
+                            "Connection": "Close"
+                        },
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        if response.status != 200:
+                            self.log.error(
+                                "Error while sending message to discord bridge (%d): %s",
+                                response.status,
+                                await response.text()
+                            )
+                            return
+                        self.log.info("Message sent to discord bridge")
+            else:
+                self.log.debug("No discord bridge token set, ignoring message")
