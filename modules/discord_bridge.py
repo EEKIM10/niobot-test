@@ -1,12 +1,9 @@
 import asyncio
 import json
-
-import aiofiles
 import websockets
 import aiohttp
 import niobot
-import os
-from nio import MatrixRoom, RoomMessageText
+from nio import MatrixRoom, RoomMessageText, RoomMessageImage
 import pathlib
 import tempfile
 
@@ -19,7 +16,9 @@ except ImportError:
 class QuoteModule(niobot.Module):
     def __init__(self, bot: niobot.NioBot):
         super().__init__(bot)
+        self.bot.add_event_callback(self.on_message, (RoomMessageText, RoomMessageImage))
         self.fifo_task = asyncio.create_task(self.message_poller())
+        self.last_author: str = "@jimmy-bot:nexy7574.co.uk"
 
     async def message_poller(self):
         if not DISCORD_BRIDGE_TOKEN:
@@ -34,24 +33,23 @@ class QuoteModule(niobot.Module):
                             "wss://droplet.nexy7574.co.uk/jimmy/bridge/recv",
                             extra_headers={"secret": DISCORD_BRIDGE_TOKEN}
                     ):
-                        while True:
-                            try:
-                                self.log.debug("Waiting for payload")
-                                payload = await ws.recv()
-                            except (KeyboardInterrupt, EOFError):
-                                return
-
+                        async for payload in ws:
                             self.log.debug("Decoding payload...")
                             payload = json.loads(payload)
                             self.log.debug("Received payload: %s", payload)
                             if payload["author"] == "Jimmy Savile#3762":
                                 continue
+                            _author = self.last_author
+                            self.last_author = payload["author"]
                             if payload["content"]:
                                 await self.bot.send_message(
                                     room,
-                                    "**%s**:<br><blockquote>%s</blockquote>" % (payload["author"], payload["content"]),
+                                    "**%s**:<br><blockquote>%s</blockquote>" % (
+                                        payload["author"], payload["content"]
+                                    ),
                                     message_type="m.text"
                                 )
+
                             if payload["attachments"]:
                                 for attachment in payload["attachments"]:
                                     try:
@@ -83,8 +81,8 @@ class QuoteModule(niobot.Module):
                 self.log.exception("Error while reading from websocket: %r", e, exc_info=e)
                 continue
 
-    @niobot.event("message")
-    async def on_message(self, room: MatrixRoom, event: RoomMessageText):
+    # @niobot.event("message")
+    async def on_message(self, room: MatrixRoom, event: RoomMessageText | RoomMessageImage):
         self.log.debug("Processing message: %s in %s", event, room)
         if self.bot.is_old(event):
             self.log.debug("Ignoring old message: %s in %s", event, room)
@@ -103,15 +101,18 @@ class QuoteModule(niobot.Module):
             return
 
         if DISCORD_BRIDGE_TOKEN:
+            payload = {
+                "secret": DISCORD_BRIDGE_TOKEN,
+                "sender": event.sender,
+                "message": event.body
+            }
+            if isinstance(event, RoomMessageImage):
+                payload["message"] = event.url
             async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__()}) as client:
                 self.log.debug("Sending message to discord bridge")
                 async with client.post(
                     "https://droplet.nexy7574.co.uk/jimmy/bridge",
-                    json={
-                        "secret": DISCORD_BRIDGE_TOKEN,
-                        "sender": event.sender,
-                        "message": event.body
-                    },
+                    json=payload,
                     headers={
                         "Connection": "Close"
                     },
