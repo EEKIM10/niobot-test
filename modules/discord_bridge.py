@@ -47,13 +47,13 @@ class QuoteModule(niobot.Module):
                             if payload["content"]:
                                 if _author == payload["author"]:
                                     text = "<blockquote>%s</blockquote>"
+                                    args = (payload["content"],)
                                 else:
                                     text = "**%s**:<br><blockquote>%s</blockquote>"
+                                    arsg = (payload["author"], payload["content"])
                                 y = await self.bot.send_message(
                                     room,
-                                    text % (
-                                        payload["author"], payload["content"]
-                                    ),
+                                    text % args,
                                     message_type="m.text"
                                 )
                                 self.bridge_responses.append(y.event_id)
