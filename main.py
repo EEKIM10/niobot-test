@@ -98,6 +98,7 @@ bot.add_event_callback(handle_key_verification_start, (nio.KeyVerificationEvent,
 @bot.on_event("ready")
 async def on_ready(_):
     bot.queue.start_worker()
+    bot.mount_module("modules.discord_bridge")
     print("Logged in as %r!" % bot.user_id)
     print("Prefix:", bot.command_prefix)
     print("Owner:", bot.owner_id)
