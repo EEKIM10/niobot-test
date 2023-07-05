@@ -1,14 +1,15 @@
 import json
 import pathlib
 import asyncio
+from urllib.parse import urlparse
+
+import aiohttp
 import niobot
 import subprocess
 from functools import partial
-from niobot.commands import Argument
 
 import nio
 import aiofiles
-import logging
 import magic
 from yt_dlp import YoutubeDL
 import tempfile
@@ -34,6 +35,7 @@ class YoutubeDownloadModule(niobot.Module):
         self.to_mount = {
             "ytdl": self.ytdl,
         }
+        self.lock = asyncio.Lock()
 
     def _download(self, url: str, download_format: str, *, temp_dir: str) -> typing.List[pathlib.Path]:
         args = YTDL_ARGS.copy()
@@ -119,11 +121,12 @@ class YoutubeDownloadModule(niobot.Module):
             body["url"] = response.content_uri
             return body
 
-    async def get_video_info(self, url: str) -> dict:
+    async def get_video_info(self, url: str, secure: bool = False) -> dict:
         """Extracts JSON information about the video"""
         args = YTDL_ARGS.copy()
         with YoutubeDL(args) as ytdl_instance:
             info = ytdl_instance.extract_info(url, download=False)
+            info = ytdl_instance.sanitize_info(info, remove_private_keys=secure)
         self.log.debug("ytdl info for %s: %r", url, info)
         return info
 
@@ -148,61 +151,95 @@ class YoutubeDownloadModule(niobot.Module):
             ),
         ]
     )
-    async def ytdl(self, ctx: niobot.Context, url: str = None, _format: str = None):
+    async def ytdl(self, ctx: niobot.Context, url: str, _format: str = None):
         """Downloads a video from YouTube"""
-        args = ctx.args
-        room = ctx.room
-        if not args:
-            await ctx.respond("Usage: ?ytdl <url> [format]")
-            return
-
-        args = args.copy()  # disown original
-        url = url or args.pop(0)
-        dl_format = _format or "(bv+ba/b)[filesize<80M]/b"  #
-        if args:
-            dl_format = _format or args.pop(0)
-
-        msg = await ctx.respond("Downloading...")
-        try:
-            with tempfile.TemporaryDirectory() as temp_dir:
-                info = await self.get_video_info(url)
-                if not info:
-                    await msg.edit("Could not get video info (Restricted?)")
-                    return
-                await msg.edit("Downloading [%r](%s)..." % (info["title"], info["original_url"]))
-                self.log.info("Downloading %s to %s", url, temp_dir)
-                loop = asyncio.get_event_loop()
-                files = await loop.run_in_executor(
-                    None,
-                    partial(self._download, url, dl_format, temp_dir=temp_dir)
-                )
-                self.log.info("Downloaded %d files", len(files))
-                if not files:
-                    await msg.edit("No files downloaded")
-                    return
-                sent = False
-                for file in files:
-                    data = self.get_metadata(file)
-                    size_mb = file.stat().st_size / 1024 / 1024
-                    resolution = "%dx%d" % (data["streams"][0]["width"], data["streams"][0]["height"])
-                    await msg.edit("Uploading %s (%dMb, %s)..." % (file.name, size_mb, resolution))
-                    self.log.info("Uploading %s (%dMb, %s)", file.name, size_mb, resolution)
-                    upload = await niobot.MediaAttachment.from_file(
-                        file,
-                    )
-                    try:
-                        await self.client.send_message(room, content=file.name, file=upload)
-                    except Exception as e:
-                        self.log.error("Error: %s", e, exc_info=e)
-                        await msg.edit("Error: %r" % e)
+        if self.lock.locked():
+            msg = await ctx.respond("Waiting for previous download to finish...")
+        else:
+            msg = await ctx.respond("Downloading...")
+        async with self.lock:
+            room = ctx.room
+            dl_format = _format or "(bv+ba/b)[filesize<80M]/b"  #
+            try:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    info = await self.get_video_info(url)
+                    if not info:
+                        await msg.edit("Could not get video info (Restricted?)")
                         return
-                    sent = True
+                    await msg.edit("Downloading [%r](%s)..." % (info["title"], info["original_url"]))
+                    self.log.info("Downloading %s to %s", url, temp_dir)
+                    loop = asyncio.get_event_loop()
+                    files = await loop.run_in_executor(
+                        None,
+                        partial(self._download, url, dl_format, temp_dir=temp_dir)
+                    )
+                    self.log.info("Downloaded %d files", len(files))
+                    if not files:
+                        await msg.edit("No files downloaded")
+                        return
+                    sent = False
+                    for file in files:
+                        data = self.get_metadata(file)
+                        size_mb = file.stat().st_size / 1024 / 1024
+                        resolution = "%dx%d" % (data["streams"][0]["width"], data["streams"][0]["height"])
 
-                if sent:
-                    await msg.edit("Completed, downloaded [your video]({})".format("url"))
-                    await asyncio.sleep(10)
-                    await msg.delete("Command completed.")
-        except Exception as e:
-            self.log.error("Error: %s", e, exc_info=e)
-            await msg.edit("Error: " + str(e))
+                        thumbnail = None
+                        if info.get("thumbnail"):
+                            parsed = urlparse(str(info["thumbnail"]))
+                            with tempfile.NamedTemporaryFile(
+                                suffix='.%s' % parsed.path.split(".")[-1],
+                                delete=False
+                            ) as thumb:
+                                async with aiohttp.ClientSession() as session:
+                                    async with session.get(info["thumbnail"]) as resp:
+                                        if resp.status == 200:
+                                            thumb.write(await resp.read())
+                                            thumb.flush()
+                                            thumb.seek(0)
+                                            att = await niobot.MediaAttachment.from_file(thumb.name)
+                                            await att.upload(ctx.client, parsed.path.split("/")[-1])
+                                            thumbnail = niobot.Thumbnail.from_attachment(att)
+
+                        await msg.edit("Uploading %s (%dMb, %s)..." % (file.name, size_mb, resolution))
+                        self.log.info("Uploading %s (%dMb, %s)", file.name, size_mb, resolution)
+                        upload = await niobot.MediaAttachment.from_file(
+                            file,
+                            thumbnail=thumbnail,
+                        )
+                        try:
+                            await self.client.send_message(room, content=file.name, file=upload)
+                        except Exception as e:
+                            self.log.error("Error: %s", e, exc_info=e)
+                            await msg.edit("Error: %r" % e)
+                            return
+                        sent = True
+
+                    if sent:
+                        await msg.edit("Completed, downloaded [your video]({})".format("url"))
+                        await asyncio.sleep(10)
+                        await msg.delete("Command completed.")
+            except Exception as e:
+                self.log.error("Error: %s", e, exc_info=e)
+                await msg.edit("Error: " + str(e))
+                return
+
+    @niobot.command("ytdl-metadata", arguments=[niobot.Argument("url", str, description="The URL to download.")])
+    async def ytdl_metadata(self, ctx: niobot.Context, url: str):
+        """Downloads and exports a JSON file with the metadata for the given video."""
+        msg = await ctx.respond("Downloading...")
+        extracted = await self.get_video_info(url, secure=True)
+        if not extracted:
+            await msg.edit("Could not get video info (Restricted?)")
             return
+        pretty = json.dumps(extracted, indent=4, default=repr)
+        if len(pretty) < 2000:
+            await msg.edit("```json\n%s\n```" % pretty)
+            return
+
+        with tempfile.NamedTemporaryFile(suffix=".json") as temp_file:
+            with open(temp_file.name, "w") as __temp_file:
+                json.dump(extracted, __temp_file, indent=4, default=repr)
+                __temp_file.flush()
+            upload = niobot.FileAttachment(temp_file.name, "application/json")
+            await ctx.respond("info.json", file=upload)
+            await msg.delete()
