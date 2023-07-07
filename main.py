@@ -19,7 +19,7 @@ import nio
 import humanize
 import niobot
 from bs4 import BeautifulSoup
-from niobot import Context, NioBotException, MediaAttachment, FileAttachment
+from niobot import Context, NioBotException, FileAttachment
 
 os.chdir(pathlib.Path(__file__).parent.absolute())
 
@@ -206,13 +206,13 @@ async def upload_attachment(ctx: Context, _type: str):
     try:
         match _type:
             case "image":
-                attachment = await MediaAttachment.from_file('./assets/image.jpg')
+                attachment = await niobot.ImageAttachment.from_file('./assets/image.jpg')
             case "video":
-                attachment = await MediaAttachment.from_file('./assets/bee-movie.webm')
+                attachment = await niobot.VideoAttachment.from_file('./assets/bee-movie.webm')
             case "audio":
-                attachment = await MediaAttachment.from_file('./assets/zombo_words.mp3')
+                attachment = await niobot.AudioAttachment.from_file('./assets/zombo_words.mp3')
             case "file":
-                attachment = FileAttachment('./assets/Manifesto.pdf')
+                attachment = await niobot.FileAttachment.from_file('./assets/Manifesto.pdf')
             case _:
                 pass
     except Exception as e:
@@ -223,8 +223,7 @@ async def upload_attachment(ctx: Context, _type: str):
         return
     msg = await ctx.respond("Uploading attachment...")
     try:
-        fn = getattr(attachment.file, 'name', attachment.media_type + '.' + attachment.mime.split("/")[-1])
-        await ctx.respond(fn, file=attachment)
+        await ctx.respond(file=attachment)
     except NioBotException as e:
         await msg.edit(f"Failed to upload attachment: {e!r}")
         return
@@ -274,14 +273,17 @@ async def version(ctx: Context, simple: bool = False):
 
 
 @bot.command(name="pretty-print", aliases=['pp'], arguments=[niobot.Argument("code", str, parser=niobot.json_parser)])
-def pretty_print(ctx: Context, code: str):
+async def pretty_print(ctx: Context, code: str):
     """Pretty prints given JSON"""
     import json
     try:
         code = json.dumps(code, indent=4)
     except json.JSONDecodeError:
         pass
-    return ctx.respond("```\n%s\n```" % code)
+    if code.count("\n") > 35:
+        x = io.BytesIO(code.encode("utf-8"))
+        return await ctx.respond(file=await niobot.FileAttachment.from_file(x, "pretty-print.json"))
+    return await ctx.respond("```\n%s\n```" % code)
 
 
 @bot.command(name="eval")

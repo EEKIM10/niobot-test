@@ -159,7 +159,7 @@ class YoutubeDownloadModule(niobot.Module):
             msg = await ctx.respond("Downloading...")
         async with self.lock:
             room = ctx.room
-            dl_format = _format or "(bv+ba/b)[filesize<80M]/b"  #
+            dl_format = _format or "(bv+ba/b)[filesize<=80M]/b"  #
             try:
                 with tempfile.TemporaryDirectory() as temp_dir:
                     info = await self.get_video_info(url)
@@ -168,11 +168,7 @@ class YoutubeDownloadModule(niobot.Module):
                         return
                     await msg.edit("Downloading [%r](%s)..." % (info["title"], info["original_url"]))
                     self.log.info("Downloading %s to %s", url, temp_dir)
-                    loop = asyncio.get_event_loop()
-                    files = await loop.run_in_executor(
-                        None,
-                        partial(self._download, url, dl_format, temp_dir=temp_dir)
-                    )
+                    files = await niobot.run_blocking(self._download, url, dl_format, temp_dir=temp_dir)
                     self.log.info("Downloaded %d files", len(files))
                     if not files:
                         await msg.edit("No files downloaded")
@@ -196,16 +192,21 @@ class YoutubeDownloadModule(niobot.Module):
                                             thumb.write(await resp.read())
                                             thumb.flush()
                                             thumb.seek(0)
-                                            att = await niobot.MediaAttachment.from_file(thumb.name)
-                                            await att.upload(ctx.client, parsed.path.split("/")[-1])
-                                            thumbnail = niobot.Thumbnail.from_attachment(att)
+                                            att = await niobot.ImageAttachment.from_file(
+                                                thumb.name,
+                                                file_name=parsed.path.split("/")[-1]
+                                            )
+                                            await att.upload(ctx.client)
+                                            thumbnail = att
 
                         await msg.edit("Uploading %s (%dMb, %s)..." % (file.name, size_mb, resolution))
                         self.log.info("Uploading %s (%dMb, %s)", file.name, size_mb, resolution)
-                        upload = await niobot.MediaAttachment.from_file(
+                        upload = await niobot.VideoAttachment.from_file(
                             file,
                             thumbnail=thumbnail,
                         )
+                        upload.thumbnail.info["h"] = upload.info["h"]
+                        upload.thumbnail.info["w"] = upload.info["w"]
                         try:
                             await self.client.send_message(room, content=file.name, file=upload)
                         except Exception as e:

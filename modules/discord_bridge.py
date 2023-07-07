@@ -71,11 +71,16 @@ class QuoteModule(niobot.Module):
                                                 tmp.write(await response.read())
                                                 tmp.flush()
                                                 tmp.seek(0)
-                                                media = niobot.MediaAttachment(
+                                                if attachment["content_type"].startswith("image/"):
+                                                    media_factory = niobot.ImageAttachment
+                                                elif attachment["content_type"].startswith("video/"):
+                                                    media_factory = niobot.VideoAttachment
+                                                elif attachment["content_type"].startswith("audio/"):
+                                                    media_factory = niobot.AudioAttachment
+                                                else:
+                                                    media_factory = niobot.BaseAttachment
+                                                media = await media_factory.from_file(
                                                     tmp.name,
-                                                    mime=attachment["content_type"],
-                                                    height=attachment["height"],
-                                                    width=attachment["width"],
                                                 )
                                                 x = await self.bot.send_message(
                                                     room,

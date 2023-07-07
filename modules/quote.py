@@ -30,7 +30,7 @@ class QuoteModule(niobot.Module):
                     return
                 with open(tmp.name, "wb") as f:
                     f.write(response.content)
-                attachment = await niobot.MediaAttachment.from_file(tmp.name)
+                attachment = await niobot.ImageAttachment.from_file(tmp.name)
                 start = time.time()
                 await ctx.respond(url, file=attachment)
                 end = time.time()
