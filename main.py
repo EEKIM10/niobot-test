@@ -99,7 +99,7 @@ bot.add_event_callback(handle_key_verification_start, (nio.KeyVerificationEvent,
 
 
 @bot.on_event("ready")
-async def on_ready(_):
+async def on_ready(_: niobot.SyncResponse):
     bot.queue.start_worker()
     try:
         from config import DISCORD_BRIDGE_TOKEN
@@ -111,6 +111,14 @@ async def on_ready(_):
     print("Prefix:", bot.command_prefix)
     print("Owner:", bot.owner_id)
     print("Device:", bot.device_id)
+    for room_id, room in bot.rooms.items():
+        members = await bot.joined_members(room_id)
+        if isinstance(members, niobot.JoinedMembersResponse):
+            if bot.user_id not in members.members:
+                continue
+            if len(members.members) == 1 and members.members[0] == bot.user_id:
+                print("Leaving empty room:", room_id)
+                bot.queue.add(bot.room_leave(room_id))
 
 
 @bot.on_event("command_error")
@@ -321,5 +329,52 @@ async def eval_(ctx: Context):
                 await _r.edit(f"```py\n{value}\n```\nEvaluation took: {end - start:.1f} seconds.")
             else:
                 await _r.edit(f"```py\n<No output>\n```\nEvaluation took: {end - start:.1f} seconds.")
+
+
+@bot.command(arguments=[niobot.Argument("room", str, default=None)])
+async def leave(ctx: Context, room: str = None):
+    """Leaves a room"""
+    if not bot.is_owner(ctx.message.sender):
+        return await ctx.respond("You are not my owner!")
+    if room is None:
+        room = ctx.room.room_id
+    msg = await ctx.respond("Leaving room %s" % room)
+    response = await bot.room_leave(room)
+    if isinstance(response, niobot.RoomLeaveError):
+        await msg.edit("Failed to leave room %s: %s" % (room, response.message))
+    else:
+        await msg.edit("Left room %s" % room)
+
+
+@bot.command(arguments=[niobot.Argument("room", str, default=None)])
+async def join(ctx: Context, room: str = None):
+    """Joins a room"""
+    if not bot.is_owner(ctx.message.sender):
+        return await ctx.respond("You are not my owner!")
+    if room is None:
+        room = ctx.room.room_id
+    msg = await ctx.respond("Joining room %s" % room)
+    response = await bot.join(room)
+    if isinstance(response, niobot.JoinError):
+        await msg.edit("Failed to join room %s: %s" % (room, response.message))
+    else:
+        await msg.edit("Joined room %s" % room)
+
+
+@bot.command(arguments=[niobot.Argument("text", str), niobot.Argument("room", str, default=None)])
+async def send(ctx: Context, text: str, room: str = None):
+    """Sends a message to a room as this user"""
+    if not bot.is_owner(ctx.message.sender):
+        return await ctx.respond("You are not my owner!")
+    if room is None:
+        room = ctx.room.room_id
+    msg = await ctx.respond("Sending message to room %s" % room)
+    try:
+        response = await bot.send_message(room, text, message_type="m.text")
+    except niobot.MessageException as e:
+        await msg.edit("Failed to send message to room %s: %s" % (room, e.message))
+    else:
+        await msg.edit("Sent message to room %s" % room)
+
 
 bot.run(access_token=getattr(config, "TOKEN", None), password=getattr(config, "PASSWORD", None))
