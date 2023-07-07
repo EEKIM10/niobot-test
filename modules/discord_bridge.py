@@ -30,7 +30,7 @@ class QuoteModule(niobot.Module):
         room = self.bot.rooms[ROOM_ID]
         while True:
             try:
-                async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__()}) as client:
+                async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
                     self.log.info("Starting fifo task")
                     async for ws in websockets.connect(
                             "wss://droplet.nexy7574.co.uk/jimmy/bridge/recv",
