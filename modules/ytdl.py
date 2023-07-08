@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 import aiohttp
 import niobot
 import subprocess
+import config
 from functools import partial
 
 import nio
@@ -39,9 +40,13 @@ class YoutubeDownloadModule(niobot.Module):
 
     def _download(self, url: str, download_format: str, *, temp_dir: str) -> typing.List[pathlib.Path]:
         args = YTDL_ARGS.copy()
+        dl_loc = pathlib.Path(temp_dir) / "dl"
+        tmp_loc = pathlib.Path(temp_dir) / "tmp"
+        dl_loc.mkdir(parents=True, exist_ok=True)
+        tmp_loc.mkdir(parents=True, exist_ok=True)
         args["paths"] = {
-            "temp": temp_dir,
-            "home": temp_dir
+            "temp": str(tmp_loc),
+            "home": str(dl_loc),
         }
         if download_format:
             args["format"] = download_format
@@ -54,7 +59,8 @@ class YoutubeDownloadModule(niobot.Module):
                 [url]
             )
 
-        return list(pathlib.Path(temp_dir).glob("*"))
+        x = list(dl_loc.iterdir())
+        return x
 
     def get_metadata(self, file: pathlib.Path):
         _meta = subprocess.run(
@@ -130,6 +136,22 @@ class YoutubeDownloadModule(niobot.Module):
         self.log.debug("ytdl info for %s: %r", url, info)
         return info
 
+    @staticmethod
+    def resolve_thumbnail(info: dict, resolution: str = None) -> typing.Optional[str]:
+        """Resolves the thumbnail URL from the info dict"""
+        width, height = 0, 0
+        if resolution:
+            width, height = map(int, resolution.split("x"))
+        if info.get("thumbnails"):
+            if isinstance(info["thumbnails"], list):
+                thumbs = info["thumbnails"].copy()
+                thumbs.sort(key=lambda x: x.get("preference", 0), reverse=True)
+                if width and height:
+                    thumbs.sort(key=lambda x: abs(x["width"] - width) + abs(x["height"] - height))
+                return thumbs[0]["url"]
+        if info.get("thumbnail"):
+            return info["thumbnail"]
+
     @niobot.command(
         "ytdl",
         help="Downloads a video from YouTube", 
@@ -166,7 +188,17 @@ class YoutubeDownloadModule(niobot.Module):
                     if not info:
                         await msg.edit("Could not get video info (Restricted?)")
                         return
-                    await msg.edit("Downloading [%r](%s)..." % (info["title"], info["original_url"]))
+                    size = int(info.get("filesize") or info.get("filesize_approx") or 30 * 1024 * 1024)
+                    download_speed = getattr(config, "DOWNLOAD_SPEED_BITS", 75)
+                    ETA = (size * 8) / download_speed
+                    minutes, seconds = divmod(ETA, 60)
+                    await msg.edit(
+                        "Downloading [%r](%s) (ETA %s)..." % (
+                            info["title"],
+                            info["original_url"],
+                            "%d minutes and %d seconds" % (minutes, seconds) if minutes else "%d seconds" % seconds
+                        )
+                    )
                     self.log.info("Downloading %s to %s", url, temp_dir)
                     files = await niobot.run_blocking(self._download, url, dl_format, temp_dir=temp_dir)
                     self.log.info("Downloaded %d files", len(files))
@@ -175,19 +207,27 @@ class YoutubeDownloadModule(niobot.Module):
                         return
                     sent = False
                     for file in files:
-                        data = self.get_metadata(file)
+                        data = await niobot.run_blocking(
+                            niobot.get_metadata,
+                            file
+                        )
                         size_mb = file.stat().st_size / 1024 / 1024
                         resolution = "%dx%d" % (data["streams"][0]["width"], data["streams"][0]["height"])
 
-                        thumbnail = None
-                        if info.get("thumbnail"):
-                            parsed = urlparse(str(info["thumbnail"]))
+                        thumbnail_url = self.resolve_thumbnail(info, resolution)
+                        if thumbnail_url:
+                            parsed = urlparse(thumbnail_url)
                             with tempfile.NamedTemporaryFile(
                                 suffix='.%s' % parsed.path.split(".")[-1],
                                 delete=False
                             ) as thumb:
-                                async with aiohttp.ClientSession() as session:
-                                    async with session.get(info["thumbnail"]) as resp:
+                                async with aiohttp.ClientSession(
+                                    headers={
+                                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                                                      niobot.__user_agent__
+                                    }
+                                ) as session:
+                                    async with session.get(thumbnail_url) as resp:
                                         if resp.status == 200:
                                             thumb.write(await resp.read())
                                             thumb.flush()
@@ -199,7 +239,17 @@ class YoutubeDownloadModule(niobot.Module):
                                             await att.upload(ctx.client)
                                             thumbnail = att
 
-                        await msg.edit("Uploading %s (%dMb, %s)..." % (file.name, size_mb, resolution))
+                        upload_speed = getattr(config, "UPLOAD_SPEED_BITS", 75)
+                        ETA = (size_mb * 8) / upload_speed
+                        minutes, seconds = divmod(ETA, 60)
+                        await msg.edit(
+                            "Uploading %s (%dMb, %s, ETA %s)..." % (
+                                file.name,
+                                size_mb,
+                                resolution,
+                                "%d minutes and %d seconds" % (minutes, seconds) if minutes else "%d seconds" % seconds
+                            )
+                        )
                         self.log.info("Uploading %s (%dMb, %s)", file.name, size_mb, resolution)
                         upload = await niobot.VideoAttachment.from_file(
                             file,

@@ -346,7 +346,8 @@ async def leave(ctx: Context, room: str = None):
         await msg.edit("Left room %s" % room)
 
 
-@bot.command(arguments=[niobot.Argument("room", str, default=None)])
+@bot.command(arguments=None)
+# @bot.command(arguments=[niobot.Argument("room", str, default=None)])
 async def join(ctx: Context, room: str = None):
     """Joins a room"""
     if not bot.is_owner(ctx.message.sender):
