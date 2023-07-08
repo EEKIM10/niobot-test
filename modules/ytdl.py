@@ -192,6 +192,7 @@ class YoutubeDownloadModule(niobot.Module):
                     download_speed = getattr(config, "DOWNLOAD_SPEED_BITS", 75)
                     ETA = (size * 8) / download_speed
                     minutes, seconds = divmod(ETA, 60)
+                    seconds = round(seconds)
                     await msg.edit(
                         "Downloading [%r](%s) (ETA %s)..." % (
                             info["title"],
@@ -239,9 +240,10 @@ class YoutubeDownloadModule(niobot.Module):
                                             await att.upload(ctx.client)
                                             thumbnail = att
 
-                        upload_speed = getattr(config, "UPLOAD_SPEED_BITS", 75)
+                        upload_speed = getattr(config, "UPLOAD_SPEED_BITS", 15)
                         ETA = (size_mb * 8) / upload_speed
                         minutes, seconds = divmod(ETA, 60)
+                        seconds = round(seconds)
                         await msg.edit(
                             "Uploading %s (%dMb, %s, ETA %s)..." % (
                                 file.name,
