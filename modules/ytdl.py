@@ -142,14 +142,22 @@ class YoutubeDownloadModule(niobot.Module):
         width, height = 0, 0
         if resolution:
             width, height = map(int, resolution.split("x"))
+        px = width * height
         if info.get("thumbnails"):
             if isinstance(info["thumbnails"], list):
                 thumbs = info["thumbnails"].copy()
                 thumbs.sort(key=lambda x: x.get("preference", 0), reverse=True)
                 if width and height:
-                    thumbs.sort(key=lambda x: abs(x["width"] - width) + abs(x["height"] - height))
+                    def _val(x):
+                        t_w = int(x.get("width", 800))
+                        t_h = int(x.get("height", 600))
+                        score_h = abs(t_h - height)
+                        score_w = abs(t_w - width)
+                        # lowest score first
+                        return score_h + score_w
+                    thumbs.sort(key=_val)
                 return thumbs[0]["url"]
-        if info.get("thumbnail"):
+        if info.get("thumbnail") and isinstance(info["thumbnail"], str):
             return info["thumbnail"]
 
     @niobot.command(
@@ -189,7 +197,7 @@ class YoutubeDownloadModule(niobot.Module):
                         await msg.edit("Could not get video info (Restricted?)")
                         return
                     size = int(info.get("filesize") or info.get("filesize_approx") or 30 * 1024 * 1024)
-                    download_speed = getattr(config, "DOWNLOAD_SPEED_BITS", 75)
+                    download_speed = getattr(config, "DOWNLOAD_SPEED_MEGABITS", 75) * (10**6)
                     ETA = (size * 8) / download_speed
                     minutes, seconds = divmod(ETA, 60)
                     seconds = round(seconds)
@@ -240,8 +248,8 @@ class YoutubeDownloadModule(niobot.Module):
                                             await att.upload(ctx.client)
                                             thumbnail = att
 
-                        upload_speed = getattr(config, "UPLOAD_SPEED_BITS", 15)
-                        ETA = (size_mb * 8) / upload_speed
+                        upload_speed = getattr(config, "UPLOAD_SPEED_BITS", 15) / (10**6)
+                        ETA = ((size_mb / 1024 / 1024) * 8) / upload_speed
                         minutes, seconds = divmod(ETA, 60)
                         seconds = round(seconds)
                         await msg.edit(
