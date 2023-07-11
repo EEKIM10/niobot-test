@@ -25,6 +25,7 @@ os.chdir(pathlib.Path(__file__).parent.absolute())
 
 logging.basicConfig(level=getattr(config, "LOG_LEVEL", logging.INFO))
 logging.getLogger("peewee").setLevel(logging.INFO)
+logging.getLogger("nio.rooms").setLevel(logging.WARNING)
 
 
 class BackgroundQueue:
@@ -191,25 +192,10 @@ async def info(ctx: Context):
     await ctx.respond("**Owner:** %s\n\n**Live device ID:** %s\n\n%s" % (bot.owner_id, bot.device_id, soup.prettify()))
 
 
-@bot.command()
-async def cud(ctx: Context):
-    """Creates, updates, and deletes a message"""
-    msg = await ctx.client.send_message(ctx.room, "Hello, World!")
-    await asyncio.sleep(1)
-    try:
-        await ctx.client.edit_message(ctx.room, msg.event_id, "Goodbye, World!")
-    except NioBotException as e:
-        await ctx.respond(f"Failed to edit message: {e!r}")
-    await asyncio.sleep(1)
-    try:
-        await ctx.client.delete_message(ctx.room, msg.event_id)
-    except NioBotException as e:
-        await ctx.respond(f"Failed to delete message: {e!r}")
-
-
 @bot.command(name="upload", usage="<type: image|video|audio|file>", arguments=[niobot.Argument("type", str)])
 async def upload_attachment(ctx: Context, _type: str):
     """Uploads an image"""
+    msg = await ctx.respond("Processing media...")
     attachment = None
     try:
         match _type:
@@ -224,12 +210,12 @@ async def upload_attachment(ctx: Context, _type: str):
             case _:
                 pass
     except Exception as e:
-        await ctx.respond(f"Failed to upload attachment: {e!r}")
+        await msg.edit(f"Failed to upload attachment: {e!r}")
         return
     if attachment is None:
-        await ctx.respond("Invalid attachment type. Please pick one of image, video, audio, or file.")
+        await msg.edit("Invalid attachment type. Please pick one of image, video, audio, or file.")
         return
-    msg = await ctx.respond("Uploading attachment...")
+    await msg.edit("Uploading attachment...")
     try:
         await ctx.respond(file=attachment)
     except NioBotException as e:
@@ -241,18 +227,6 @@ async def upload_attachment(ctx: Context, _type: str):
 
 
 @bot.command()
-async def hello(ctx: Context):
-    """Asks for an input"""
-    res = await ctx.respond("Hello, what is your name?")
-    try:
-        _, msg = await bot.wait_for_message(sender=ctx.message.sender, room_id=ctx.room.room_id, timeout=10)
-    except asyncio.TimeoutError:
-        await res.edit("You took too long to respond!")
-    else:
-        await res.edit(f"Hello, {msg.body}!")
-
-
-@bot.command(arguments=[niobot.Argument("simple", bool, default=False, parser=niobot.boolean_parser)])
 async def version(ctx: Context, simple: bool = False):
     """Shows the version of nio"""
     if not simple and shutil.which("niocli"):
@@ -291,10 +265,10 @@ async def pretty_print(ctx: Context, code: str):
     if code.count("\n") > 35:
         x = io.BytesIO(code.encode("utf-8"))
         return await ctx.respond(file=await niobot.FileAttachment.from_file(x, "pretty-print.json"))
-    return await ctx.respond("```\n%s\n```" % code)
+    return await ctx.respond("```json\n%s\n```" % code)
 
 
-@bot.command(name="eval")
+# @bot.command(name="eval")
 async def eval_(ctx: Context):
     """Evaluates Python code"""
     if ctx.message.sender != bot.owner_id:
@@ -378,4 +352,5 @@ async def send(ctx: Context, text: str, room: str = None):
         await msg.edit("Sent message to room %s" % room)
 
 
+bot.mount_module("modules.user_eval")
 bot.run(access_token=getattr(config, "TOKEN", None), password=getattr(config, "PASSWORD", None))
