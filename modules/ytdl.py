@@ -304,9 +304,10 @@ class YoutubeDownloadModule(niobot.Module):
             return
 
         with tempfile.NamedTemporaryFile(suffix=".json") as temp_file:
+            p = pathlib.Path(temp_file.name)
             with open(temp_file.name, "w") as __temp_file:
                 json.dump(extracted, __temp_file, indent=4, default=repr)
                 __temp_file.flush()
-            upload = niobot.FileAttachment(temp_file.name, temp_file.name, "application/json")
+            upload = niobot.FileAttachment(p, "application/json")
             await ctx.respond("info.json", file=upload)
             await msg.delete()
