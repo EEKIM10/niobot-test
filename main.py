@@ -268,43 +268,6 @@ async def pretty_print(ctx: Context, code: str):
     return await ctx.respond("```json\n%s\n```" % code)
 
 
-# @bot.command(name="eval")
-async def eval_(ctx: Context):
-    """Evaluates Python code"""
-    if ctx.message.sender != bot.owner_id:
-        return await ctx.respond("You are not my owner!")
-
-    out = io.StringIO()
-    stripped = ctx.message.body[len(bot.command_prefix + "eval"):].strip()
-    if stripped.startswith(("```", "```py")):
-        stripped = "\n".join(stripped.split("\n")[1:-1])
-    elif stripped.startswith("`") and stripped.endswith("`"):
-        stripped = stripped[1:-1]
-
-    if stripped.startswith("await") or stripped.startswith("#!/async"):
-        stripped = "async def __eval_func():\n" + textwrap.indent(stripped, "    ")
-        stripped += "\n\nwait_for = loop.create_task(__eval_func())"
-
-    with contextlib.redirect_stdout(out) as stdout:
-        _r = await ctx.respond("Evaluating...\n```py\n%s\n```" % stripped)
-        _locals = {**globals(), **locals(), "ctx": ctx, "loop": asyncio.get_event_loop()}
-        try:
-            start = time.time()
-            await niobot.run_blocking(exec, stripped, globals(), _locals)
-            end = time.time()
-        except Exception as e:
-            await _r.edit(f"```py\n{e!r}\n```")
-        else:
-            if _locals.get("wait_for"):
-                result = await _locals["wait_for"]
-                print("<awaited result: %r>" % result, file=out)
-            value = stdout.getvalue().strip()
-            if value:
-                await _r.edit(f"```py\n{value}\n```\nEvaluation took: {end - start:.1f} seconds.")
-            else:
-                await _r.edit(f"```py\n<No output>\n```\nEvaluation took: {end - start:.1f} seconds.")
-
-
 @bot.command(arguments=[niobot.Argument("room", str, default=None)])
 async def leave(ctx: Context, room: str = None):
     """Leaves a room"""

@@ -183,6 +183,9 @@ class YoutubeDownloadModule(niobot.Module):
     )
     async def ytdl(self, ctx: niobot.Context, url: str, _format: str = None):
         """Downloads a video from YouTube"""
+        if ctx.room.encrypted:
+            await ctx.respond("This command is not available in encrypted rooms.")
+            return
         if self.lock.locked():
             msg = await ctx.respond("Waiting for previous download to finish...")
         else:
@@ -210,12 +213,14 @@ class YoutubeDownloadModule(niobot.Module):
                     )
                     self.log.info("Downloading %s to %s", url, temp_dir)
                     files = await niobot.run_blocking(self._download, url, dl_format, temp_dir=temp_dir)
+                    await msg.edit("Processing...")
                     self.log.info("Downloaded %d files", len(files))
                     if not files:
                         await msg.edit("No files downloaded")
                         return
                     sent = False
                     for file in files:
+                        thumbnail = None
                         data = await niobot.run_blocking(
                             niobot.get_metadata,
                             file
@@ -265,8 +270,9 @@ class YoutubeDownloadModule(niobot.Module):
                             file,
                             thumbnail=thumbnail,
                         )
-                        upload.thumbnail.info["h"] = upload.info["h"]
-                        upload.thumbnail.info["w"] = upload.info["w"]
+                        if upload.thumbnail:
+                            upload.thumbnail.info["h"] = upload.info["h"]
+                            upload.thumbnail.info["w"] = upload.info["w"]
                         try:
                             await self.client.send_message(room, content=file.name, file=upload)
                         except Exception as e:
@@ -301,6 +307,6 @@ class YoutubeDownloadModule(niobot.Module):
             with open(temp_file.name, "w") as __temp_file:
                 json.dump(extracted, __temp_file, indent=4, default=repr)
                 __temp_file.flush()
-            upload = niobot.FileAttachment(temp_file.name, "application/json")
+            upload = niobot.FileAttachment(temp_file.name, temp_file.name, "application/json")
             await ctx.respond("info.json", file=upload)
             await msg.delete()
