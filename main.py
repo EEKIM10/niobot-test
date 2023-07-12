@@ -276,6 +276,45 @@ async def leave(ctx: Context, room: str = None):
         return await ctx.respond("You are not my owner!")
     if room is None:
         room = ctx.room.room_id
+    
+    if room == "--empty":
+        msg = await ctx.respond("Gathering rooms...")
+        log = io.BytesIO()
+        targets = []
+        for room in bot.rooms.values():
+            members = room.users.copy()
+            if bot.user_id not in members:
+                log.write(
+                    b'Room %s (%s) is in the room list, but I am not a member?' % (
+                        room.room_id,
+                        room.display_name,
+                    )
+                )
+                continue
+            members.pop(bot.user_id, None)
+            log.write(
+                b'Room %s (%s) had %d members after popping myself.\n' % (
+                    room.room_id,
+                    room.display_name,
+                    len(members),
+                )
+            )
+            if len(members) == 0:
+                targets.append(room.room_id)
+        log.seek(0)
+        await msg.edit('Leaving %d rooms...' % len(targets))
+        for room in targets:
+            await bot.room_leave(room)
+            await bot.room_forget(room)
+        
+        value = log.getvalue()
+        if len(value) > 1000:
+            log.seek(0)
+            await msg.delete()
+            await ctx.respond(file=await niobot.FileAttachment.from_file(log, "leave.log"))
+        else:
+            await msg.edit('Done! Log:\n```%s```' % log.read().decode("utf-8"))
+
     msg = await ctx.respond("Leaving room %s" % room)
     response = await bot.room_leave(room)
     if isinstance(response, niobot.RoomLeaveError):
@@ -283,6 +322,45 @@ async def leave(ctx: Context, room: str = None):
     else:
         await msg.edit("Left room %s" % room)
 
+
+@bot.command(name="members")
+async def members(ctx: Context, room_id: str = None, cached: int = 0):
+    """Lists members of a given room"""
+    if room_id is None:
+        room_id = ctx.room.room_id
+    
+    room = bot.rooms.get(room_id)
+    if room is None:
+        return await ctx.respond("I am not in room %s." % room_id)
+    
+    if cached:
+        members = room.users.copy()
+    else:
+        members = (await bot.joined_members(room_id)).members
+    
+    if len(members) == 0:
+        return await ctx.respond("Room %s has no members." % room_id)
+    elif len(members) == 1:
+        if list(members.keys())[0] == bot.user_id:
+            return await ctx.respond("I am the only member of room %s." % room_id)
+    
+    if not bot.is_owner(ctx.message.sender):
+        if ctx.message.sender not in members:
+            return await ctx.respond("You do not have permission to view %r's members." % room_id)
+    
+    if len(members) > 10:
+        x = io.BytesIO()
+        x.write('{:,} members:\n'.format(len(members)).encode("utf-8"))
+        for item in enumerate(members.values(), 1):
+            x.write(('{0:,}. {1.display_name} ({1.user_id})\n'.format(*item))).encode("utf-8"))
+        x.seek(0)
+        return await ctx.respond(file=await niobot.FileAttachment.from_file(x, "members.txt"))
+    else:
+        return await ctx.respond(
+            '```%s```' % '\n'.join(
+                '{0:,}. {1.display_name} ({1.user_id})'.format(*item) for item in enumerate(members.values(), 1)
+            )
+        )
 
 @bot.command(arguments=None)
 # @bot.command(arguments=[niobot.Argument("room", str, default=None)])
