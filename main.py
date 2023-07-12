@@ -324,7 +324,7 @@ async def leave(ctx: Context, room: str = None):
 
 
 @bot.command(name="members")
-async def members(ctx: Context, room_id: str = None, cached: int = 0):
+async def members(ctx: Context, room_id: str = None, cached: int = 1):
     """Lists members of a given room"""
     if room_id is None:
         room_id = ctx.room.room_id
@@ -337,6 +337,7 @@ async def members(ctx: Context, room_id: str = None, cached: int = 0):
         members = room.users.copy()
     else:
         members = (await bot.joined_members(room_id)).members
+        members = {x.id: x for x in members}
     
     if len(members) == 0:
         return await ctx.respond("Room %s has no members." % room_id)
