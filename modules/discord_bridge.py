@@ -140,13 +140,13 @@ class QuoteModule(niobot.Module):
                             data = await response.json()
                             if data["detail"] == "Message too long.":
                                 await self.bot.add_reaction(room, event, "\N{PRINTER}\N{VARIATION SELECTOR-16}")
-                        elif response.status != 200:
-                            await self.bot.add_reaction(room, event, "\N{CROSS MARK}")
+                        elif response.status != 201:
                             self.log.error(
                                 "Error while sending message to discord bridge (%d): %s",
                                 response.status,
                                 await response.text()
                             )
+                            await self.bot.add_reaction(room, event, "\N{CROSS MARK}")
                             return
                         self.log.info("Message sent to discord bridge")
             else:
