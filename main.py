@@ -352,7 +352,7 @@ async def members(ctx: Context, room_id: str = None, cached: int = 0):
         x = io.BytesIO()
         x.write('{:,} members:\n'.format(len(members)).encode("utf-8"))
         for item in enumerate(members.values(), 1):
-            x.write(('{0:,}. {1.display_name} ({1.user_id})\n'.format(*item))).encode("utf-8"))
+            x.write(('{0:,}. {1.display_name} ({1.user_id})\n'.format(*item)).encode('utf-8'))
         x.seek(0)
         return await ctx.respond(file=await niobot.FileAttachment.from_file(x, "members.txt"))
     else:
