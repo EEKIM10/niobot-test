@@ -35,14 +35,15 @@ class EvalModule(niobot.Module):
     @staticmethod
     def undress_codeblock(code: str) -> str:
         """Removes any code block syntax from the given string."""
+        code = code.strip()
         lines = code.splitlines()
         if len(lines) > 2:
-            if lines[0].startswith("```") and lines[-1].endswith("```"):
+            if lines[0].startswith("```") and code.endswith("```"):
                 return "\n".join(lines[1:-1])
             if lines[0].startswith("```"):
                 re.sub(r"```(.{0,10})\n", "", code, 1)
             if lines[-1].endswith("```"):
-                re.sub(r"\n```", "", code, 1)
+                re.sub(r"\n```$", "", code, 1)
         if code.startswith("`") and code.endswith("`"):
             return code[1:-1]
         return code
