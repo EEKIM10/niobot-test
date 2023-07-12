@@ -78,7 +78,7 @@ class QuoteModule(niobot.Module):
                                                 elif attachment["content_type"].startswith("audio/"):
                                                     media_factory = niobot.AudioAttachment
                                                 else:
-                                                    media_factory = niobot.BaseAttachment
+                                                    media_factory = niobot.FileAttachment
                                                 media = await media_factory.from_file(
                                                     tmp.name,
                                                 )
@@ -136,7 +136,12 @@ class QuoteModule(niobot.Module):
                         },
                         timeout=aiohttp.ClientTimeout(total=5)
                     ) as response:
-                        if response.status != 200:
+                        if response.status == 400:
+                            data = await response.json()
+                            if data["detail"] == "Message too long.":
+                                await self.bot.add_reaction(room, event, "\N{PRINTER}\N{VARIATION SELECTOR-16}")
+                        elif response.status != 200:
+                            await self.bot.add_reaction(room, event, "\N{CROSS MARK}")
                             self.log.error(
                                 "Error while sending message to discord bridge (%d): %s",
                                 response.status,

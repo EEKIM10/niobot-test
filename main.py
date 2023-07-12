@@ -265,6 +265,7 @@ async def pretty_print(ctx: Context, code: str):
     if code.count("\n") > 35:
         x = io.BytesIO(code.encode("utf-8"))
         return await ctx.respond(file=await niobot.FileAttachment.from_file(x, "pretty-print.json"))
+    await bot.add_reaction(ctx.room, ctx.message, "\N{white heavy check mark}")
     return await ctx.respond("```json\n%s\n```" % code)
 
 

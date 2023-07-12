@@ -83,6 +83,8 @@ class EvalModule(niobot.Module):
         code = textwrap.indent(code, "    ")
         code = f"async def __eval():\n{code}"
         msg = await ctx.respond("Evaluating...")
+        e = await self.client.add_reaction(ctx.room, ctx.message, "\N{hammer}")
+        # noinspection PyBroadException
         try:
             start = time.time() * 1000
             runner = await niobot.run_blocking(exec, code, g)
@@ -107,6 +109,10 @@ class EvalModule(niobot.Module):
                 lines.append("Stdout:\n```\n" + stdout.getvalue() + "```")
             if stderr.getvalue():
                 lines.append("Stderr:\n```\n" + stderr.getvalue() + "```")
-            await ctx.respond("\n".join(lines))
+            await ctx.client.add_reaction(ctx.room, ctx.message, "\N{white heavy check mark}")
+            await msg.edit("\n".join(lines))
         except Exception as e:
-            await ctx.respond(f"Error:\n```py\n{traceback.format_exc()}```")
+            await ctx.client.add_reaction(ctx.room, ctx.message, "\N{cross mark}")
+            await msg.edit(f"Error:\n```py\n{traceback.format_exc()}```")
+        finally:
+            await ctx.client.redact_reaction(ctx.room, e)
