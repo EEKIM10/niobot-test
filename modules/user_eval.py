@@ -85,7 +85,7 @@ class EvalModule(niobot.Module):
         code = code.replace('\u00A0', ' ')  # 00A0 is &nbsp;
         code = textwrap.indent(code, "    ")
         code = f"async def __eval():\n{code}"
-        msg = await ctx.respond("Evaluating...")
+        msg = await ctx.respond(f"Evaluating:\n```py\n{code}\n```")
         e = await self.client.add_reaction(ctx.room, ctx.message, "\N{hammer}")
         # noinspection PyBroadException
         try:
@@ -107,6 +107,8 @@ class EvalModule(niobot.Module):
                         width=80,
                         underscore_numbers=True,
                     )
+                else:
+                    result = repr(result)
                 lines += ["Result:\n", "```", str(result), "```\n"]
             else:
                 lines += ['No result.\n']
