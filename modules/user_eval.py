@@ -78,9 +78,11 @@ class EvalModule(niobot.Module):
             "stdout": stdout,
             "stderr": stderr,
             "_print": print,
-            "print": functools.partial(print, file=stdout)
+            "print": functools.partial(print, file=stdout),
+            "niobot": niobot,
+            "pprint": pprint.pprint,
         }
-
+        code = code.replace('\u00A0', ' ')  # 00A0 is &nbsp;
         code = textwrap.indent(code, "    ")
         code = f"async def __eval():\n{code}"
         msg = await ctx.respond("Evaluating...")
@@ -105,7 +107,7 @@ class EvalModule(niobot.Module):
                         width=80,
                         underscore_numbers=True,
                     )
-                lines += ["Result:\n", "```", result, "```\n"]
+                lines += ["Result:\n", "```", str(result), "```\n"]
             if stdout.getvalue():
                 lines.append("Stdout:\n```\n" + stdout.getvalue() + "```")
             if stderr.getvalue():
@@ -115,5 +117,3 @@ class EvalModule(niobot.Module):
         except Exception:
             await ctx.client.add_reaction(ctx.room, ctx.message, "\N{cross mark}")
             await msg.edit(f"Error:\n```py\n{traceback.format_exc()}```")
-        finally:
-            await ctx.client.redact_reaction(ctx.room, e)
