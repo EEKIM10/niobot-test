@@ -41,9 +41,9 @@ class EvalModule(niobot.Module):
             return "\n".join(lines[1:-1])
         if len(lines) > 2:
             if lines[0].startswith("```"):
-                re.sub(r"```(.{0,10})\n", "", code, 1)
+                code = re.sub(r"```(.{0,10})\n", "", code, 1)
             if lines[-1].endswith("```"):
-                re.sub(r"\n```$", "", code, 1)
+                code = re.sub(r"\n```$", "", code, 1)
         if code.startswith("`") and code.endswith("`"):
             return code[1:-1]
         return code
@@ -112,7 +112,7 @@ class EvalModule(niobot.Module):
                 lines.append("Stderr:\n```\n" + stderr.getvalue() + "```")
             await ctx.client.add_reaction(ctx.room, ctx.message, "\N{white heavy check mark}")
             await msg.edit("\n".join(lines))
-        except Exception as e:
+        except Exception:
             await ctx.client.add_reaction(ctx.room, ctx.message, "\N{cross mark}")
             await msg.edit(f"Error:\n```py\n{traceback.format_exc()}```")
         finally:

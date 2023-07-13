@@ -129,7 +129,9 @@ async def on_command_error(ctx: Context, error: Exception):
     elif isinstance(error, niobot.CommandDisabledError):
         await ctx.respond("Command disabled: " + str(error))
     else:
+        error = getattr(error, 'exception', error)
         await ctx.respond("Error: " + str(error))
+        bot.log.error('command error in %s: %r', ctx.command.name, error, exc_info=error)
 
 
 @bot.on_event("message")
@@ -285,19 +287,19 @@ async def leave(ctx: Context, room: str = None):
             members = room.users.copy()
             if bot.user_id not in members:
                 log.write(
-                    b'Room %s (%s) is in the room list, but I am not a member?' % (
+                    ('Room %s (%s) is in the room list, but I am not a member?' % (
                         room.room_id,
                         room.display_name,
-                    )
+                    )).encode()
                 )
                 continue
             members.pop(bot.user_id, None)
             log.write(
-                b'Room %s (%s) had %d members after popping myself.\n' % (
+                ('Room %s (%s) had %d members after popping myself.\n' % (
                     room.room_id,
                     room.display_name,
                     len(members),
-                )
+                )).encode()
             )
             if len(members) == 0:
                 targets.append(room.room_id)
@@ -314,13 +316,13 @@ async def leave(ctx: Context, room: str = None):
             await ctx.respond(file=await niobot.FileAttachment.from_file(log, "leave.log"))
         else:
             await msg.edit('Done! Log:\n```%s```' % log.read().decode("utf-8"))
-
-    msg = await ctx.respond("Leaving room %s" % room)
-    response = await bot.room_leave(room)
-    if isinstance(response, niobot.RoomLeaveError):
-        await msg.edit("Failed to leave room %s: %s" % (room, response.message))
     else:
-        await msg.edit("Left room %s" % room)
+        msg = await ctx.respond("Leaving room %s" % room)
+        response = await bot.room_leave(room)
+        if isinstance(response, niobot.RoomLeaveError):
+            await msg.edit("Failed to leave room %s: %s" % (room, response.message))
+        else:
+            await msg.edit("Left room %s" % room)
 
 
 @bot.command(name="members")
