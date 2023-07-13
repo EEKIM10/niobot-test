@@ -108,6 +108,8 @@ class EvalModule(niobot.Module):
                         underscore_numbers=True,
                     )
                 lines += ["Result:\n", "```", str(result), "```\n"]
+            else:
+                lines += ['No result.\n']
             if stdout.getvalue():
                 lines.append("Stdout:\n```\n" + stdout.getvalue() + "```")
             if stderr.getvalue():
