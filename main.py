@@ -1,13 +1,13 @@
 import collections
-import contextlib
 import io
 import os
+import pprint
 import shutil
 import subprocess
-import textwrap
 import pathlib
 import time
 from datetime import timedelta
+from pathlib import Path
 
 import psutil
 import logging
@@ -19,13 +19,20 @@ import nio
 import humanize
 import niobot
 from bs4 import BeautifulSoup
-from niobot import Context, NioBotException, FileAttachment
+from niobot import Context, NioBotException
 
 os.chdir(pathlib.Path(__file__).parent.absolute())
 
 logging.basicConfig(level=getattr(config, "LOG_LEVEL", logging.INFO))
 logging.getLogger("peewee").setLevel(logging.INFO)
 logging.getLogger("nio.rooms").setLevel(logging.WARNING)
+
+MODULES = (
+    "modules.quote",
+    "modules.support",
+    "modules.user_eval",
+    "modules.ytdl"
+)
 
 
 class BackgroundQueue:
@@ -83,8 +90,6 @@ bot = niobot.NioBot(
 )
 bot.queue = BackgroundQueue()
 bot.ping_history = collections.deque(maxlen=100)
-bot.mount_module("modules.ytdl")
-bot.mount_module("modules.quote")
 
 
 async def handle_key_verification_start(event: nio.KeyVerificationEvent):
@@ -101,6 +106,11 @@ bot.add_event_callback(handle_key_verification_start, (nio.KeyVerificationEvent,
 
 @bot.on_event("ready")
 async def on_ready(_: niobot.SyncResponse):
+    for module in MODULES:
+        try:
+            bot.mount_module(module)
+        except Exception as e:
+            logging.error("Failed to load %s: %s", module, e, exc_info=True)
     bot.queue.start_worker()
     try:
         from config import DISCORD_BRIDGE_TOKEN
@@ -113,11 +123,11 @@ async def on_ready(_: niobot.SyncResponse):
     print("Owner:", bot.owner_id)
     print("Device:", bot.device_id)
     for room_id, room in bot.rooms.items():
-        members = await bot.joined_members(room_id)
-        if isinstance(members, niobot.JoinedMembersResponse):
-            if bot.user_id not in members.members:
+        _members = await bot.joined_members(room_id)
+        if isinstance(_members, niobot.JoinedMembersResponse):
+            if bot.user_id not in _members.members:
                 continue
-            if len(members.members) == 1 and members.members[0] == bot.user_id:
+            if len(_members.members) == 1 and _members.members[0] == bot.user_id:
                 print("Leaving empty room:", room_id)
                 bot.queue.add(bot.room_leave(room_id))
 
@@ -199,21 +209,43 @@ async def upload_attachment(ctx: Context, _type: str):
     """Uploads an image"""
     msg = await ctx.respond("Processing media...")
     attachment = None
-    try:
-        match _type:
-            case "image":
-                attachment = await niobot.ImageAttachment.from_file('./assets/image.jpg')
-            case "video":
-                attachment = await niobot.VideoAttachment.from_file('./assets/bee-movie.webm')
-            case "audio":
-                attachment = await niobot.AudioAttachment.from_file('./assets/zombo_words.mp3')
-            case "file":
-                attachment = await niobot.FileAttachment.from_file('./assets/Manifesto.pdf')
-            case _:
-                pass
-    except Exception as e:
-        await msg.edit(f"Failed to upload attachment: {e!r}")
-        return
+    if _type.startswith("/"):
+        p = Path(__file__).parent / "assets" / _type[1:]
+        if not p.exists():
+            await msg.edit("File does not exist.")
+            return
+        # Make sure it doesn't go above __file__.parent:
+        p = p.resolve()
+        if (Path(__file__).parent / "assets") not in p.parents:
+            await msg.edit("File does not exist (out of bounds).")
+            return
+        file_type = niobot.detect_mime_type(p)
+        _types = {
+            "image": niobot.ImageAttachment,
+            "video": niobot.VideoAttachment,
+            "audio": niobot.AudioAttachment
+        }
+        try:
+            attachment = await _types.get(file_type.split("/")[0], niobot.FileAttachment).from_file(p)
+        except Exception as e:
+            await msg.edit(f"Failed to upload attachment: {e!r}")
+            return
+    else:
+        try:
+            match _type:
+                case "image":
+                    attachment = await niobot.ImageAttachment.from_file('./assets/image.jpg')
+                case "video":
+                    attachment = await niobot.VideoAttachment.from_file('./assets/bee-movie.webm')
+                case "audio":
+                    attachment = await niobot.AudioAttachment.from_file('./assets/zombo_words.mp3')
+                case "file":
+                    attachment = await niobot.FileAttachment.from_file('./assets/Manifesto.pdf')
+                case _:
+                    pass
+        except Exception as e:
+            await msg.edit(f"Failed to upload attachment: {e!r}")
+            return
     if attachment is None:
         await msg.edit("Invalid attachment type. Please pick one of image, video, audio, or file.")
         return
@@ -326,7 +358,7 @@ async def leave(ctx: Context, room: str = None):
 
 
 @bot.command(name="members")
-async def members(ctx: Context, room_id: str = None, cached: int = 1):
+async def members_cmd(ctx: Context, room_id: str = None, cached: int = 1):
     """Lists members of a given room"""
     if room_id is None:
         room_id = ctx.room.room_id
@@ -339,7 +371,7 @@ async def members(ctx: Context, room_id: str = None, cached: int = 1):
         members = room.users.copy()
     else:
         members = (await bot.joined_members(room_id)).members
-        members = {x.id: x for x in members}
+        members = {x.user_id: x for x in members}
     
     if len(members) == 0:
         return await ctx.respond("Room %s has no members." % room_id)
@@ -365,6 +397,7 @@ async def members(ctx: Context, room_id: str = None, cached: int = 1):
             )
         )
 
+
 @bot.command(arguments=None)
 # @bot.command(arguments=[niobot.Argument("room", str, default=None)])
 async def join(ctx: Context, room: str = None):
@@ -382,20 +415,26 @@ async def join(ctx: Context, room: str = None):
 
 
 @bot.command(arguments=[niobot.Argument("text", str), niobot.Argument("room", str, default=None)])
+@niobot.is_owner()
 async def send(ctx: Context, text: str, room: str = None):
     """Sends a message to a room as this user"""
-    if not bot.is_owner(ctx.message.sender):
-        return await ctx.respond("You are not my owner!")
+    # if not bot.is_owner(ctx.message.sender):
+    #     return await ctx.respond("You are not my owner!")
     if room is None:
         room = ctx.room.room_id
     msg = await ctx.respond("Sending message to room %s" % room)
     try:
-        response = await bot.send_message(room, text, message_type="m.text")
+        await bot.send_message(room, text, message_type="m.text")
     except niobot.MessageException as e:
         await msg.edit("Failed to send message to room %s: %s" % (room, e.message))
     else:
         await msg.edit("Sent message to room %s" % room)
 
 
-bot.mount_module("modules.user_eval")
+@bot.command()
+async def modules(ctx):
+    """Lists currently loaded modules."""
+    await ctx.respond("Loaded modules:\n%s" % "\n".join("* " + str(x) for x in MODULES))
+
+
 bot.run(access_token=getattr(config, "TOKEN", None), password=getattr(config, "PASSWORD", None))

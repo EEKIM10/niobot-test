@@ -2,6 +2,8 @@
 Module that provides code-evaluation commands.
 This entire module is locked to NioBot.owner.
 """
+import shlex
+import tempfile
 import textwrap
 import niobot
 import asyncio
@@ -37,16 +39,9 @@ class EvalModule(niobot.Module):
         """Removes any code block syntax from the given string."""
         code = code.strip()
         lines = code.splitlines(False)
-        if lines[0].startswith("```"):
-            return "\n".join(lines[1:-1])
-        if len(lines) > 2:
-            if lines[0].startswith("```"):
-                code = re.sub(r"```(.{0,10})\n", "", code, 1)
-            if lines[-1].endswith("```"):
-                code = re.sub(r"\n```$", "", code, 1)
-        if code.startswith("`") and code.endswith("`"):
-            return code[1:-1]
-        return code
+        if len(lines[0]) == 2 or lines[0] in ("py", "python", "python3"):  # likely a codeblock language identifier
+            lines = lines[1:]
+        return "\n".join(lines)
 
     @niobot.command("eval")
     async def python_eval(self, ctx: niobot.Context, code: str):
@@ -118,6 +113,45 @@ class EvalModule(niobot.Module):
                 lines.append("Stderr:\n```\n" + stderr.getvalue() + "```")
             await ctx.client.add_reaction(ctx.room, ctx.message, "\N{white heavy check mark}")
             await msg.edit("\n".join(lines))
+        except Exception:
+            await ctx.client.add_reaction(ctx.room, ctx.message, "\N{cross mark}")
+            await msg.edit(f"Error:\n```py\n{traceback.format_exc()}```")
+
+    @niobot.command("shell")
+    async def shell(self, ctx: niobot.Context, command: str):
+        """Runs a shell command in a subprocess. Does not output live."""
+        if command.startswith("sh\n"):
+            command = command[3:]
+        if command.startswith("$ "):
+            command = command[2:]
+
+        if not await self.owner_check(ctx):
+            return
+
+        msg = await ctx.respond(f"Running command: `{command}`")
+        cmd, args = command.split(" ", 1)
+        e = await self.client.add_reaction(ctx.room, ctx.message, "\N{hammer}")
+        # noinspection PyBroadException
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                proc = await asyncio.create_subprocess_exec(
+                    cmd,
+                    *shlex.split(args),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    stdin=asyncio.subprocess.DEVNULL,
+                    cwd=tmpdir,
+                )
+                await proc.wait()
+                await ctx.client.add_reaction(ctx.room, ctx.message, "\N{white heavy check mark}")
+                lines = [f"Input:\n```sh\n$ {cmd} {args}\n```\n"]
+                stdout = (await proc.stdout.read()).decode().replace("```", "`\u200b`\u200b`")
+                stderr = (await proc.stderr.read()).decode().replace("```", "`\u200b`\u200b`")
+                if stdout:
+                    lines.append("Stdout:\n```\n" + stdout + "```\n")
+                if stderr:
+                    lines.append("Stderr:\n```\n" + stderr + "```\n")
+                await msg.edit("\n".join(lines))
         except Exception:
             await ctx.client.add_reaction(ctx.room, ctx.message, "\N{cross mark}")
             await msg.edit(f"Error:\n```py\n{traceback.format_exc()}```")

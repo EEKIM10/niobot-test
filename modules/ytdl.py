@@ -26,7 +26,11 @@ YTDL_ARGS: typing.Dict[str, typing.Any] = {
     "quiet": True,
     'noprogress': True,
     "nooverwrites": True,
-    'format': "(bv+ba/b)[filesize<100M]/b"
+    'format': "(bv+ba/b)[filesize<100M]/b",
+    "format_sort": [
+        "codec",
+        "ext"
+    ]
 }
 
 
@@ -52,6 +56,7 @@ class YoutubeDownloadModule(niobot.Module):
             args["format"] = download_format
         else:
             args["format"] = "(bv+ba/b)[filesize<100M]"
+        args["format"] = "(%s)[vcodec!=h265]" % args["format"]
 
         with YoutubeDL(args) as ytdl_instance:
             self.log.info("Downloading %s with format: %r", url, args["format"])
@@ -62,27 +67,6 @@ class YoutubeDownloadModule(niobot.Module):
         x = list(dl_loc.iterdir())
         return x
 
-    def get_metadata(self, file: pathlib.Path):
-        _meta = subprocess.run(
-            [
-                "ffprobe",
-                "-of",
-                "json",
-                "-loglevel",
-                "9",
-                "-show_entries",
-                "stream=width,height",
-                str(file)
-            ],
-            capture_output=True,
-            encoding="utf-8",
-            errors="replace"
-        )
-        if _meta.returncode != 0:
-            self.log.warning("ffprobe failed (%d): %s", _meta.returncode, _meta.stderr)
-            return
-        return json.loads(_meta.stdout)
-
     async def upload_files(self, file: pathlib.Path):
         stat = file.stat()
         # max 99Mb
@@ -91,7 +75,7 @@ class YoutubeDownloadModule(niobot.Module):
             return
         mime = magic.Magic(mime=True).from_file(file)
         self.log.debug("File %s is %s", file, mime)
-        metadata = self.get_metadata(file) or {}
+        metadata = await niobot.run_blocking(niobot.get_metadata, file) or {}
         if not metadata.get("streams"):
             self.log.warning("No streams for %s", file)
             return
@@ -311,3 +295,31 @@ class YoutubeDownloadModule(niobot.Module):
             upload = niobot.FileAttachment(p, "application/json")
             await ctx.respond("info.json", file=upload)
             await msg.delete()
+
+    @niobot.command("media-info")
+    async def media_info(self, ctx: niobot.Context, event_id: str, room_id: str = None):
+        """Views information for an attached image/video/audio file."""
+        room_id = room_id or ctx.room.room_id
+        try:
+            event: niobot.RoomGetEventResponse = await self.bot.fetch_message(room_id, event_id)
+        except niobot.NioBotException:
+            await ctx.respond("Could not find event")
+            return
+        event: niobot.Event = event.event
+
+        if not isinstance(event, (niobot.RoomMessageImage, niobot.RoomMessageAudio, niobot.RoomMessageVideo)):
+            await ctx.respond("Event is not an image, video, or audio file (%r)" % type(event))
+            return
+
+        msg = await ctx.respond("Downloading, please wait.")
+        response = await self.bot.download(event.url)
+        if not isinstance(response, niobot.DownloadResponse):
+            await ctx.respond("Could not download media: %r" % response)
+            return
+        suffix = pathlib.Path(response.filename).suffix
+        with tempfile.NamedTemporaryFile("wb", suffix=suffix) as _file:
+            _file.write(response.body)
+            _file.flush()
+            _file.seek(0)
+            metadata = await niobot.run_blocking(niobot.get_metadata, _file.name)
+            await ctx.respond("```json\n%s\n```" % json.dumps(metadata, indent=4, default=repr))
