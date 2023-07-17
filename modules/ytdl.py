@@ -297,29 +297,45 @@ class YoutubeDownloadModule(niobot.Module):
             await msg.delete()
 
     @niobot.command("media-info")
-    async def media_info(self, ctx: niobot.Context, event_id: str, room_id: str = None):
+    async def media_info(self, ctx: niobot.Context, event: niobot.Event):
         """Views information for an attached image/video/audio file."""
-        room_id = room_id or ctx.room.room_id
-        try:
-            event: niobot.RoomGetEventResponse = await self.bot.fetch_message(room_id, event_id)
-        except niobot.NioBotException:
-            await ctx.respond("Could not find event")
-            return
-        event: niobot.Event = event.event
-
-        if not isinstance(event, (niobot.RoomMessageImage, niobot.RoomMessageAudio, niobot.RoomMessageVideo)):
+        if not isinstance(event, (niobot.RoomMessageMedia,)):
             await ctx.respond("Event is not an image, video, or audio file (%r)" % type(event))
             return
+        room_id = event.room_id
 
         msg = await ctx.respond("Downloading, please wait.")
         response = await self.bot.download(event.url)
         if not isinstance(response, niobot.DownloadResponse):
-            await ctx.respond("Could not download media: %r" % response)
+            await msg.edit("Could not download media: %r" % response)
             return
         suffix = pathlib.Path(response.filename).suffix
         with tempfile.NamedTemporaryFile("wb", suffix=suffix) as _file:
             _file.write(response.body)
             _file.flush()
             _file.seek(0)
+            media_type = response.content_type or await niobot.run_blocking(niobot.detect_mime_type, _file.name)
+            attachment = await ({
+                'image': niobot.ImageAttachment,
+                'audio': niobot.AudioAttachment,
+                'video': niobot.VideoAttachment
+            }.get(media_type.split("/")[0], niobot.FileAttachment)).from_file(_file.name)
             metadata = await niobot.run_blocking(niobot.get_metadata, _file.name)
-            await ctx.respond("```json\n%s\n```" % json.dumps(metadata, indent=4, default=repr))
+            duration = getattr(attachment, 'duration', 'N/A')
+            resolution = "{0.width}x{0.height}".format(attachment) if hasattr(attachment, 'width') else 'N/A'
+            lines = [
+                '# Summary',
+                '- **File Type**: %s' % media_type,
+                '- **File Size**: {:.1f} MiB ({:,} bytes)'.format(metadata.size_as('MiB'), len(response.body)),
+                '- **File Name**: %s' % response.filename or pathlib.Path(_file.name).name,
+                '- **URL**: HTTP: %s | MXC: %s' % (self.bot.mxc_to_htt(response.url), response.url),
+                "",
+                '# Metadata',
+                '- **Duration**: %s seconds' % duration,
+                '- **Resolution**: %s' % resolution,
+                '- **MIME Type**: %s' % media_type,
+                '',
+                '# Raw probe info',
+                '```json\n%s\n```' % json.dumps(metadata, indent=4, default=repr)
+            ]
+            await msg.edit("\n".join(lines))
