@@ -297,12 +297,11 @@ class YoutubeDownloadModule(niobot.Module):
             await msg.delete()
 
     @niobot.command("media-info")
-    async def media_info(self, ctx: niobot.Context, event: niobot.Event):
+    async def media_info(self, ctx: niobot.Context, event: niobot.Event, room: niobot.MatrixRoom = None):
         """Views information for an attached image/video/audio file."""
         if not isinstance(event, (niobot.RoomMessageMedia,)):
             await ctx.respond("Event is not an image, video, or audio file (%r)" % type(event))
             return
-        room_id = event.room_id
 
         msg = await ctx.respond("Downloading, please wait.")
         response = await self.bot.download(event.url)

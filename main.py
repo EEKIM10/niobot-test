@@ -20,6 +20,7 @@ import humanize
 import niobot
 from bs4 import BeautifulSoup
 from niobot import Context, NioBotException
+import help_command
 
 os.chdir(pathlib.Path(__file__).parent.absolute())
 
@@ -88,6 +89,9 @@ bot = niobot.NioBot(
     owner_id=getattr(config, "OWNER_ID", "@nex:nexy7574.co.uk"),
     store_path=getattr(config, "STORE_PATH", "./store"),
 )
+bot.commands.pop('h')
+bot.commands.pop('help')
+bot.command('help', aliases=['h'])(help_command.custom_help)
 bot.queue = BackgroundQueue()
 bot.ping_history = collections.deque(maxlen=100)
 
