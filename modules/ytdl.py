@@ -297,7 +297,7 @@ class YoutubeDownloadModule(niobot.Module):
             await msg.delete()
 
     @niobot.command("media-info")
-    async def media_info(self, ctx: niobot.Context, event: niobot.Event, room: niobot.MatrixRoom = None):
+    async def media_info(self, ctx: niobot.Context, event: niobot.Event):
         """Views information for an attached image/video/audio file."""
         if not isinstance(event, (niobot.RoomMessageMedia,)):
             await ctx.respond("Event is not an image, video, or audio file (%r)" % type(event))
@@ -313,6 +313,7 @@ class YoutubeDownloadModule(niobot.Module):
             _file.write(response.body)
             _file.flush()
             _file.seek(0)
+            await msg.edit('Processing, please wait.')
             media_type = response.content_type or await niobot.run_blocking(niobot.detect_mime_type, _file.name)
             attachment = await ({
                 'image': niobot.ImageAttachment,
@@ -325,9 +326,9 @@ class YoutubeDownloadModule(niobot.Module):
             lines = [
                 '# Summary',
                 '- **File Type**: %s' % media_type,
-                '- **File Size**: {:.1f} MiB ({:,} bytes)'.format(metadata.size_as('MiB'), len(response.body)),
-                '- **File Name**: %s' % response.filename or pathlib.Path(_file.name).name,
-                '- **URL**: HTTP: %s | MXC: %s' % (self.bot.mxc_to_htt(response.url), response.url),
+                '- **File Size**: {:.1f} MiB ({:,} bytes)'.format(attachment.size_as('mib'), len(response.body)),
+                '- **File Name**: `%s`' % response.filename or pathlib.Path(_file.name).name,
+                '- **URL**: HTTP: %s | MXC: %s' % (await self.bot.mxc_to_http(event.url), event.url),
                 "",
                 '# Metadata',
                 '- **Duration**: %s seconds' % duration,
