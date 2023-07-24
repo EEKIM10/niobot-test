@@ -4,7 +4,7 @@ import json
 import websockets
 import aiohttp
 import niobot
-from nio import MatrixRoom, RoomMessageText, RoomMessageImage
+from nio import MatrixRoom, RoomMessageText, RoomMessageMedia
 import pathlib
 import tempfile
 
@@ -123,7 +123,7 @@ class QuoteModule(niobot.Module):
                     "sender": event.sender,
                     "message": event.body
                 }
-                if isinstance(event, RoomMessageImage):
+                if isinstance(event, RoomMessageMedia):
                     payload["message"] = await self.bot.mxc_to_http(event.url)
                 self.log.debug("Payload: %s", payload)
                 async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
