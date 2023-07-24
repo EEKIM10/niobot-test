@@ -17,7 +17,7 @@ except ImportError:
 class QuoteModule(niobot.Module):
     def __init__(self, bot: niobot.NioBot):
         super().__init__(bot)
-        self.bot.add_event_callback(self.on_message, (RoomMessageText, RoomMessageImage))
+        self.bot.add_event_callback(self.on_message, (RoomMessageText, RoomMessageMedia))
         self.fifo_task = asyncio.create_task(self.message_poller())
         self.last_author: str = "@jimmy-bot:nexy7574.co.uk"
         self.bridge_responses = collections.deque(maxlen=100)
@@ -96,7 +96,7 @@ class QuoteModule(niobot.Module):
                 continue
 
     # @niobot.event("message")
-    async def on_message(self, room: MatrixRoom, event: RoomMessageText | RoomMessageImage):
+    async def on_message(self, room: MatrixRoom, event: RoomMessageText | RoomMessageMedia):
         async with self.bridge_lock:
             self.log.debug("Processing message: %s in %s", event, room)
             if self.bot.is_old(event):
