@@ -190,7 +190,7 @@ class SupportRoomModule(niobot.Module):
 
     @niobot.event("message")
     async def on_message(self, room: niobot.MatrixRoom, message: niobot.RoomMessageText):
-        if message.sender == self.bot.user_id:
+        if message.sender == self.bot.user_id or room.room_id != self.ROOM_ID:
             return
 
         msc_links = []
