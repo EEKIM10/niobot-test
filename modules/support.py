@@ -5,6 +5,7 @@ import re
 try:
     from config import GH_PAT
 except ImportError:
+    logging.warning("No GH_PAT found in config, GitHub API rate limits will likely be hit.")
     GH_PAT = None
 
 import packaging.version
@@ -17,7 +18,7 @@ import asyncio
 
 def auth_getter():
     if GH_PAT:
-        return ("__token__", GH_PAT)
+        return GH_PAT, GH_PAT
     else:
         return None
 
@@ -48,6 +49,8 @@ class SupportRoomModule(niobot.Module):
         self.log = logging.getLogger(__name__)
         self.task = asyncio.create_task(self.github_task())
         self.db_lock = asyncio.Lock()
+        if auth_getter():
+            self.log.info("Using GitHub PAT for API requests.")
 
     @staticmethod
     def version_is_newer(a: str, b: str) -> bool:
