@@ -20,6 +20,7 @@ class QuoteModule(niobot.Module):
         self.bot.add_event_callback(self.on_message, (RoomMessageText, RoomMessageMedia))
         self.fifo_task = asyncio.create_task(self.message_poller())
         self.last_author: str = "@jimmy-bot:nexy7574.co.uk"
+        self.last_author_ts = 0
         self.bridge_responses = collections.deque(maxlen=100)
         self.bridge_lock = asyncio.Lock()
 

@@ -1,6 +1,12 @@
 # Support room module
 import datetime
 import logging
+import re
+try:
+    from config import GH_PAT
+except ImportError:
+    GH_PAT = None
+
 import packaging.version
 
 import niobot
@@ -10,9 +16,18 @@ import asyncio
 
 
 class SupportRoomModule(niobot.Module):
-    ROOM_ID = "!rwJEulKnHLoffvXAof:nexy7574.co.uk"
+    ROOM_ID = "!LlxsraKrMIwxkqBXwE:nexy7574.co.uk"
     PYPI_API_URL = "https://pypi.org/pypi/nio-bot/json"
     GITHUB_API_URL = "https://api.github.com/repos/EEKIM10/niobot/releases/latest"
+    MSC_REGEX = re.compile(
+        r"\[MSC(\d+)]",
+        re.IGNORECASE
+    )
+    MSC_URL = "https://api.github.com/repos/matrix-org/matrix-spec-proposals/pulls/%s"
+    GH_REGEX = re.compile(
+        r"(nio(bot)?)#(\d+)"
+    )
+    GH_URL = "https://api.github.com/repos/%s/issues/%s"
     
     def __init__(self, bot: niobot.NioBot):
         super().__init__(bot)
@@ -25,6 +40,7 @@ class SupportRoomModule(niobot.Module):
         self.next_run = datetime.datetime.utcnow()
         self.log = logging.getLogger(__name__)
         self.task = asyncio.create_task(self.github_task())
+        self.db_lock = asyncio.Lock()
 
     @staticmethod
     def version_is_newer(a: str, b: str) -> bool:
@@ -65,7 +81,11 @@ class SupportRoomModule(niobot.Module):
                     version = data["tag_name"]
                     room = self.bot.rooms.get(self.ROOM_ID)
                     if room:
-                        old_version, topic = room.topic.split(" | ", 1)
+                        try:
+                            old_version, topic = room.topic.split(" | ", 1)
+                        except ValueError:
+                            old_version = "foo: 0.0.0"
+                            topic = room.topic
                         old_version = old_version.split(": ", 1)[1].strip()
                         old_version = old_version.split(" ", 1)[0].strip()
                         newer = self.version_is_newer(version, old_version)
@@ -156,3 +176,77 @@ class SupportRoomModule(niobot.Module):
         await msg.edit(
             "\n\n".join(lines)
         )
+
+    @niobot.event("message")
+    async def on_message(self, room: niobot.MatrixRoom, message: niobot.RoomMessageText):
+        if message.sender == self.bot.user_id:
+            return
+
+        msc_links = []
+        for msc_match in self.MSC_REGEX.finditer(message.body):
+            response = await self.http_client.get(
+                self.MSC_URL % msc_match.group(1)
+            )
+            if response.status_code == 200:
+                data = response.json()
+                msc_links.append("[%s](%s)" % (data['title'], response.url))
+            elif response.status_code == 404:
+                msc_links.append("`MSC%s` does not exist." % msc_match.group(1))
+            else:
+                msc_links.append(f"Failed to fetch MSC{msc_match.group(1)} (HTTP {response.status_code})")
+
+        if msc_links:
+            if len(msc_links) == 1:
+                await self.bot.send_message(
+                    room,
+                    msc_links[0],
+                    reply_to=message,
+                    clean_mentions=True,
+                    message_type="m.text"
+                )
+            else:
+                await self.bot.send_message(
+                    room,
+                    "\n".join("* %s" % x for x in msc_links),
+                    reply_to=message,
+                    clean_mentions=True,
+                    message_type="m.text"
+                )
+
+        gh_links = []
+        repos = {
+            "nio": "poljar/matrix-nio",
+            "niobot": "EEKIM10/niobot",
+        }
+        for gh_match in self.GH_REGEX.finditer(message.body):
+            if gh_match.group(1) in repos:
+                repo = repos[gh_match.group(1)]
+                no = gh_match.group(3)
+                response = await self.http_client.get(
+                    self.GH_URL % (repo, no)
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    gh_links.append("[%s/%s#%s](%s)" % (repo, data['title'], no, data["html_url"]))
+                elif response.status_code == 404:
+                    gh_links.append("`%s#%s` does not exist." % (repo, no))
+                else:
+                    gh_links.append(f"Failed to fetch {repo}#{no} (HTTP {response.status_code})")
+
+        if gh_links:
+            if len(gh_links) == 1:
+                await self.bot.send_message(
+                    room,
+                    gh_links[0],
+                    reply_to=message,
+                    clean_mentions=True,
+                    message_type="m.text"
+                )
+            else:
+                await self.bot.send_message(
+                    room,
+                    "\n".join("* %s" % x for x in gh_links),
+                    reply_to=message,
+                    clean_mentions=True,
+                    message_type="m.text"
+                )
