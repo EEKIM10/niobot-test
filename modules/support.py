@@ -15,6 +15,13 @@ import httpx
 import asyncio
 
 
+def auth_getter():
+    if GH_PAT:
+        return ("__token__", GH_PAT)
+    else:
+        return None
+
+
 class SupportRoomModule(niobot.Module):
     ROOM_ID = "!LlxsraKrMIwxkqBXwE:nexy7574.co.uk"
     PYPI_API_URL = "https://pypi.org/pypi/nio-bot/json"
@@ -64,7 +71,8 @@ class SupportRoomModule(niobot.Module):
                     headers["If-None-Match"] = self.last_etag
                 response = await self.http_client.get(
                     self.GITHUB_API_URL,
-                    headers=headers
+                    headers=headers,
+                    auth=auth_getter()
                 )
                 if response.status_code == 304:
                     data = None
@@ -160,7 +168,7 @@ class SupportRoomModule(niobot.Module):
             lines.append("PyPi version: [%s](%s)" % (pypi_version, data["info"]["package_url"]))
 
         # Get GitHub version
-        github_response = await self.http_client.get(self.GITHUB_API_URL)
+        github_response = await self.http_client.get(self.GITHUB_API_URL, auth=auth_getter())
         if github_response.status_code != 200:
             lines.append(
                 "\N{cross mark} Failed to fetch GitHub version (HTTP %d %s)" % (
@@ -185,7 +193,8 @@ class SupportRoomModule(niobot.Module):
         msc_links = []
         for msc_match in self.MSC_REGEX.finditer(message.body):
             response = await self.http_client.get(
-                self.MSC_URL % msc_match.group(1)
+                self.MSC_URL % msc_match.group(1),
+                auth=auth_getter()
             )
             if response.status_code == 200:
                 data = response.json()
@@ -223,11 +232,12 @@ class SupportRoomModule(niobot.Module):
                 repo = repos[gh_match.group(1)]
                 no = gh_match.group(3)
                 response = await self.http_client.get(
-                    self.GH_URL % (repo, no)
+                    self.GH_URL % (repo, no),
+                    auth=auth_getter()
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    gh_links.append("[%s/%s#%s](%s)" % (repo, data['title'], no, data["html_url"]))
+                    gh_links.append("[%s#%s - %s](%s)" % (repo, no, data['title'], data["html_url"]))
                 elif response.status_code == 404:
                     gh_links.append("`%s#%s` does not exist." % (repo, no))
                 else:
