@@ -94,7 +94,7 @@ class QuoteModule(niobot.Module):
                                                     room,
                                                     'BRIDGE_' + attachment["filename"],
                                                     file=media,
-                                                    reply_to=y.event_id
+                                                    reply_to=y.event_id if y else None
                                                 )
                                                 self.bridge_responses.append(x.event_id)
                                     except Exception as e:
