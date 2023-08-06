@@ -1,6 +1,7 @@
 import asyncio
 import collections
 import datetime
+import io
 import json
 import websockets
 import aiohttp
@@ -100,24 +101,33 @@ class QuoteModule(niobot.Module):
                                                         first_frame_raw,
                                                         generate_blurhash=False
                                                     )
-                                                    await first_frame.get_blurhash(
-                                                        file=await niobot.run_blocking(
-                                                            niobot.ImageAttachment.thumbnailify_image,
-                                                            first_frame_raw
-                                                        )
+                                                    thumb = await niobot.run_blocking(
+                                                        niobot.ImageAttachment.thumbnailify_image,
+                                                        tmp.name
                                                     )
+                                                    _thumb = io.BytesIO()
+                                                    thumb.save(_thumb, format="webp")
+                                                    await first_frame.get_blurhash(file=_thumb)
                                                     media.thumbnail = first_frame
                                                 elif isinstance(media_factory, niobot.ImageAttachment):
                                                     media = await media_factory.from_file(
                                                         tmp.name,
                                                         generate_blurhash=False
                                                     )
-                                                    await media.get_blurhash(
-                                                        file=await niobot.run_blocking(
-                                                            niobot.ImageAttachment.thumbnailify_image,
-                                                            tmp.name
-                                                        )
+                                                    self.log.info("Generating thumbnail")
+                                                    thumb = await niobot.run_blocking(
+                                                        niobot.ImageAttachment.thumbnailify_image,
+                                                        tmp.name
                                                     )
+                                                    _thumb = io.BytesIO()
+                                                    thumb.save(_thumb, format="webp")
+                                                    self.log.info("Generated thumbnail")
+                                                    self.log.info("Generating blurhash for thumbnail")
+                                                    r = await media.get_blurhash(
+                                                        file=_thumb
+                                                    )
+                                                    self.log.info("Generated blurhash for thumbnail: %s", r)
+
                                                 else:
                                                     media = await media_factory.from_file(
                                                         tmp.name,
