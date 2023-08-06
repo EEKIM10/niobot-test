@@ -89,12 +89,13 @@ class QuoteModule(niobot.Module):
                                                         generate_blurhash=False
                                                     )
                                                     assert media.xyz_amorgan_blurhash is None
-                                                    thumbnail = io.BytesIO(
+                                                    thumbnail = io.BytesIO()
+                                                    (
                                                         await niobot.run_blocking(
                                                             media.thumbnailify_image,
                                                             PIL.Image.open(media.file)
                                                         )
-                                                    )
+                                                    ).save(thumbnail, "webp")
                                                     await media.get_blurhash(file=thumbnail)
                                                 elif attachment["content_type"].startswith("video/"):
                                                     # step one - create the video attachment without a thumbnail
@@ -105,12 +106,13 @@ class QuoteModule(niobot.Module):
                                                     )
 
                                                     # step two - extract the first frame of the video
-                                                    frame_one = await niobot.run_blocking(
+                                                    _frame_one = await niobot.run_blocking(
                                                         niobot.first_frame,
                                                         PIL.Image.open(media.file),
                                                         "webp"
                                                     )
-                                                    frame_one = io.BytesIO(frame_one)
+                                                    frame_one = io.BytesIO()
+                                                    _frame_one.save(frame_one, "webp")
 
                                                     # step three - scale the video down to 320x240
                                                     thumbnail = io.BytesIO(
