@@ -79,17 +79,55 @@ class QuoteModule(niobot.Module):
                                                 tmp.write(await response.read())
                                                 tmp.flush()
                                                 tmp.seek(0)
+                                                media = None
                                                 if attachment["content_type"].startswith("image/"):
                                                     media_factory = niobot.ImageAttachment
                                                 elif attachment["content_type"].startswith("video/"):
                                                     media_factory = niobot.VideoAttachment
                                                 elif attachment["content_type"].startswith("audio/"):
                                                     media_factory = niobot.AudioAttachment
+
+                                                if isinstance(media_factory, niobot.VideoAttachment):
+                                                    media = await media_factory.from_file(
+                                                        tmp.name,
+                                                        generate_blurhash=False
+                                                    )
+                                                    first_frame_raw = await niobot.run_blocking(
+                                                        niobot.first_frame,
+                                                        tmp.name
+                                                    )
+                                                    first_frame = await niobot.ImageAttachment.from_file(
+                                                        first_frame_raw,
+                                                        generate_blurhash=False
+                                                    )
+                                                    await first_frame.get_blurhash(
+                                                        file=await niobot.run_blocking(
+                                                            niobot.ImageAttachment.thumbnailify_image,
+                                                            first_frame_raw
+                                                        )
+                                                    )
+                                                    media.thumbnail = first_frame
+                                                elif isinstance(media_factory, niobot.ImageAttachment):
+                                                    media = await media_factory.from_file(
+                                                        tmp.name,
+                                                        generate_blurhash=False
+                                                    )
+                                                    await media.get_blurhash(
+                                                        file=await niobot.run_blocking(
+                                                            niobot.ImageAttachment.thumbnailify_image,
+                                                            tmp.name
+                                                        )
+                                                    )
                                                 else:
-                                                    media_factory = niobot.FileAttachment
-                                                media = await media_factory.from_file(
-                                                    tmp.name,
-                                                )
+                                                    media = await media_factory.from_file(
+                                                        tmp.name,
+                                                    )
+
+                                                if not media:
+                                                    media = await media_factory.from_file(
+                                                        tmp.name,
+                                                    )
+
                                                 x = await self.bot.send_message(
                                                     room,
                                                     'BRIDGE_' + attachment["filename"],
