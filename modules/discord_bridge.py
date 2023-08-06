@@ -163,10 +163,10 @@ class QuoteModule(niobot.Module):
         task_okay = self.fifo_task and not self.fifo_task.done()
         last_ts = datetime.datetime.fromtimestamp(self.last_author_ts, tz=datetime.timezone.utc)
         lines = [
-            "WebSocket: %s" % ("Okay" if task_okay else "Not connected"),
-            "Lock: %s" % ("Locked" if self.bridge_lock.locked() else "Not locked"),
-            "Last author: `%s`" % self.last_author,
-            "Last author timestamp: `%d` (%s)" % (
+            "* WebSocket: %s" % ("Okay" if task_okay else "Not connected"),
+            "* Lock: %s" % ("Locked" if self.bridge_lock.locked() else "Not locked"),
+            "* Last author: `%s`" % self.last_author,
+            "* Last author timestamp: `%d` (%s)" % (
                 self.last_author_ts,
                 last_ts.strftime("%d/%m/%Y %H:%M:%S %Z")
             ),
