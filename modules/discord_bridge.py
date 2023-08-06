@@ -81,62 +81,56 @@ class QuoteModule(niobot.Module):
                                                 tmp.flush()
                                                 tmp.seek(0)
                                                 media = None
+
                                                 if attachment["content_type"].startswith("image/"):
-                                                    media_factory = niobot.ImageAttachment
+                                                    media = await niobot.ImageAttachment.from_file(
+                                                        tmp.name,
+                                                        generate_blurhash=False
+                                                    )
+                                                    assert media.xyz_amorgan_blurhash is None
+                                                    thumbnail = io.BytesIO(
+                                                        await niobot.run_blocking(
+                                                            media.thumbnailify_image,
+                                                            media.file
+                                                        )
+                                                    )
+                                                    await media.get_blurhash(file=thumbnail)
                                                 elif attachment["content_type"].startswith("video/"):
-                                                    media_factory = niobot.VideoAttachment
-                                                elif attachment["content_type"].startswith("audio/"):
-                                                    media_factory = niobot.AudioAttachment
-
-                                                if isinstance(media_factory, niobot.VideoAttachment):
-                                                    media = await media_factory.from_file(
+                                                    # step one - create the video attachment without a thumbnail
+                                                    media = await niobot.VideoAttachment.from_file(
                                                         tmp.name,
-                                                        generate_blurhash=False
+                                                        generate_blurhash=False,
+                                                        thumbnail=False
                                                     )
-                                                    first_frame_raw = await niobot.run_blocking(
+
+                                                    # step two - extract the first frame of the video
+                                                    frame_one = await niobot.run_blocking(
                                                         niobot.first_frame,
-                                                        tmp.name
+                                                        media.file,
+                                                        "webp"
                                                     )
-                                                    first_frame = await niobot.ImageAttachment.from_file(
-                                                        first_frame_raw,
-                                                        generate_blurhash=False
-                                                    )
-                                                    thumb = await niobot.run_blocking(
-                                                        niobot.ImageAttachment.thumbnailify_image,
-                                                        tmp.name
-                                                    )
-                                                    _thumb = io.BytesIO()
-                                                    thumb.save(_thumb, format="webp")
-                                                    await first_frame.get_blurhash(file=_thumb)
-                                                    media.thumbnail = first_frame
-                                                elif isinstance(media_factory, niobot.ImageAttachment):
-                                                    media = await media_factory.from_file(
-                                                        tmp.name,
-                                                        generate_blurhash=False
-                                                    )
-                                                    self.log.info("Generating thumbnail")
-                                                    thumb = await niobot.run_blocking(
-                                                        niobot.ImageAttachment.thumbnailify_image,
-                                                        tmp.name
-                                                    )
-                                                    _thumb = io.BytesIO()
-                                                    thumb.save(_thumb, format="webp")
-                                                    self.log.info("Generated thumbnail")
-                                                    self.log.info("Generating blurhash for thumbnail")
-                                                    r = await media.get_blurhash(
-                                                        file=_thumb
-                                                    )
-                                                    self.log.info("Generated blurhash for thumbnail: %s", r)
+                                                    frame_one = io.BytesIO(frame_one)
 
+                                                    # step three - scale the video down to 320x240
+                                                    thumbnail = io.BytesIO(
+                                                        await niobot.run_blocking(
+                                                            niobot.ImageAttachment.thumbnailify_image,
+                                                            frame_one
+                                                        )
+                                                    )
+
+                                                    # Step four - cast to an image attachment
+                                                    media_thumbnail = await niobot.ImageAttachment.from_file(
+                                                        thumbnail,
+                                                    )
+
+                                                    # Step five - assign the thumbnail to the video attachment
+                                                    media.thumbnail = media_thumbnail
                                                 else:
-                                                    media = await media_factory.from_file(
-                                                        tmp.name,
-                                                    )
-
-                                                if not media:
-                                                    media = await media_factory.from_file(
-                                                        tmp.name,
-                                                    )
+                                                    factory = niobot.which(tmp.name)
+                                                    if factory is None:
+                                                        continue
+                                                    media = await factory.from_file(tmp.name)
 
                                                 x = await self.bot.send_message(
                                                     room,
