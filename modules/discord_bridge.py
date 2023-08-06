@@ -44,6 +44,7 @@ class QuoteModule(niobot.Module):
                             if payload["author"] == "Jimmy Savile#3762":
                                 continue
                             _author = self.last_author
+                            y = None
                             self.last_author = payload["author"]
                             if payload["content"]:
                                 if _author == payload["author"]:
@@ -86,7 +87,8 @@ class QuoteModule(niobot.Module):
                                                 x = await self.bot.send_message(
                                                     room,
                                                     'BRIDGE_' + attachment["filename"],
-                                                    file=media
+                                                    file=media,
+                                                    reply_to=y
                                                 )
                                                 self.bridge_responses.append(x.event_id)
                                     except Exception as e:
@@ -135,7 +137,7 @@ class QuoteModule(niobot.Module):
                         headers={
                             "Connection": "Close"
                         },
-                        timeout=aiohttp.ClientTimeout(total=5)
+                        timeout=aiohttp.ClientTimeout(total=10)
                     ) as response:
                         if response.status == 400:
                             data = await response.json()
