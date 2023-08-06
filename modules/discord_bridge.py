@@ -40,13 +40,18 @@ class QuoteModule(niobot.Module):
                     ):
                         async for payload in ws:
                             self.log.debug("Decoding payload...")
-                            payload = json.loads(payload)
+                            try:
+                                payload = json.loads(payload)
+                            except json.JSONDecodeError as e:
+                                self.log.exception("Error while decoding payload: %r", e, exc_info=e)
+                                continue
                             self.log.debug("Received payload: %s", payload)
                             if payload["author"] == "Jimmy Savile#3762":
                                 continue
                             _author = self.last_author
                             y = None
                             self.last_author = payload["author"]
+                            self.last_author_ts = payload["at"]
                             if payload["content"]:
                                 if _author == payload["author"]:
                                     text = "<blockquote>%s</blockquote>"
