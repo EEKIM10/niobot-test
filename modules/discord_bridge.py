@@ -3,6 +3,8 @@ import collections
 import datetime
 import io
 import json
+
+import PIL.Image
 import websockets
 import aiohttp
 import niobot
@@ -80,7 +82,6 @@ class QuoteModule(niobot.Module):
                                                 tmp.write(await response.read())
                                                 tmp.flush()
                                                 tmp.seek(0)
-                                                media = None
 
                                                 if attachment["content_type"].startswith("image/"):
                                                     media = await niobot.ImageAttachment.from_file(
@@ -91,7 +92,7 @@ class QuoteModule(niobot.Module):
                                                     thumbnail = io.BytesIO(
                                                         await niobot.run_blocking(
                                                             media.thumbnailify_image,
-                                                            media.file
+                                                            PIL.Image.open(media.file)
                                                         )
                                                     )
                                                     await media.get_blurhash(file=thumbnail)
@@ -106,7 +107,7 @@ class QuoteModule(niobot.Module):
                                                     # step two - extract the first frame of the video
                                                     frame_one = await niobot.run_blocking(
                                                         niobot.first_frame,
-                                                        media.file,
+                                                        PIL.Image.open(media.file),
                                                         "webp"
                                                     )
                                                     frame_one = io.BytesIO(frame_one)
