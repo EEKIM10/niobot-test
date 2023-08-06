@@ -45,7 +45,7 @@ class QuoteModule(niobot.Module):
                             except json.JSONDecodeError as e:
                                 self.log.exception("Error while decoding payload: %r", e, exc_info=e)
                                 continue
-                            self.log.debug("Received payload: %s", payload)
+                            self.log.info("Received bridge payload:\n%s", json.dumps(payload, indent=4))
                             if payload["author"] == "Jimmy Savile#3762":
                                 continue
                             _author = self.last_author
