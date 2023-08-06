@@ -111,7 +111,7 @@ class QuoteModule(niobot.Module):
                 self.log.debug("Ignoring message in %s", room)
                 return
 
-            if event.body.startswith("~"):
+            if event.body.startswith(("~", "?", "!")):
                 self.log.debug("Ignoring escaped message: %s", event)
                 return
 
