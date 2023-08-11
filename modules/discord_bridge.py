@@ -6,6 +6,7 @@ import json
 import aiosqlite
 
 import PIL.Image
+import PIL.ImageDraw
 import websockets
 import aiohttp
 import niobot
