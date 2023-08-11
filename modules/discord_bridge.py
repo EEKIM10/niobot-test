@@ -67,7 +67,7 @@ class QuoteModule(niobot.Module):
         draw.ellipse((0, 0) + img.size, fill=255)
 
         img.putalpha(mask)
-        img.thumbnail((32, 32), PIL.Image.Resampling.LANCZOS, 3)
+        img.thumbnail((16, 16), PIL.Image.Resampling.LANCZOS, 3)
         img.save(path)
         return path
 
