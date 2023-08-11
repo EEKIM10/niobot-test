@@ -45,6 +45,7 @@ class QuoteModule(niobot.Module):
                         with tempfile.NamedTemporaryFile() as tmp:
                             tmp.write(await response.read())
                             tmp.flush()
+                            await niobot.run_blocking(self.make_image_round, pathlib.Path(tmp.name))
                             tmp.seek(0)
                             media = await niobot.ImageAttachment.from_file(tmp.name)
                             await media.upload(self.bot, False)
@@ -52,6 +53,20 @@ class QuoteModule(niobot.Module):
                                                      (avatar_url, media.url))
                             await connection.commit()
                             return media.url
+
+    @staticmethod
+    def make_image_round(path: pathlib.Path) -> pathlib.Path:
+        """Effectively the same as adding border-radius: 50% to the image"""
+        img = PIL.Image.open(path)
+        img = img.convert("RGBA")
+        mask = PIL.Image.new("L", img.size, 0)
+
+        draw = PIL.ImageDraw.Draw(mask)
+        draw.ellipse((0, 0) + img.size, fill=255)
+
+        img.putalpha(mask)
+        img.save(path)
+        return path
 
     async def message_poller(self):
         if not DISCORD_BRIDGE_TOKEN:
@@ -91,7 +106,7 @@ class QuoteModule(niobot.Module):
                                     if payload.get("avatar"):
                                         avatar_url = payload["avatar"]
                                         avatar_mxc = await self.get_mxc_for(avatar_url)
-                                        _resolved_author = '<img src="%s" width="1.5em" height="1.5em"> %s' % (
+                                        _resolved_author = '<img src="%s" width="1.2em" height="1.2em"> %s' % (
                                             avatar_mxc,
                                             payload["author"]
                                         )
