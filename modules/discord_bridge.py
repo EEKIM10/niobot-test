@@ -79,11 +79,12 @@ class QuoteModule(niobot.Module):
         while True:
             try:
                 async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
-                    self.log.info("Starting fifo task")
+                    self.log.info("Starting discord bridge task")
                     async for ws in websockets.connect(
                             "wss://droplet.nexy7574.co.uk/jimmy/bridge/recv",
                             extra_headers={"secret": DISCORD_BRIDGE_TOKEN}
                     ):
+                        self.log.info("Connected to discord bridge & awaiting messages.")
                         async for payload in ws:
                             self.log.debug("Decoding payload...")
                             try:
