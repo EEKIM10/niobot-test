@@ -5,6 +5,8 @@ This entire module is locked to NioBot.owner.
 import shlex
 import tempfile
 import textwrap
+
+import aiohttp
 import niobot
 import asyncio
 import re
@@ -155,3 +157,29 @@ class EvalModule(niobot.Module):
         except Exception:
             await ctx.client.add_reaction(ctx.room, ctx.message, "\N{cross mark}")
             await msg.edit(f"Error:\n```py\n{traceback.format_exc()}```")
+
+    @niobot.command("thumbnail", hidden=True)
+    @niobot.is_owner()
+    async def thumbnail(self, ctx: niobot.Context, url: str):
+        """Get the thumbnail for a URL"""
+        async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
+            async with client.get(url) as response:
+                if response.status != 200:
+                    await ctx.respond("Error: %d" % response.status)
+                    return
+                data = await response.read()
+                data = io.BytesIO(data)
+                thumb = await niobot.run_blocking(
+                    niobot.ImageAttachment.thumbnailify_image,
+                    data,
+                )
+                thumb.save('file.webp', "webp")
+                attachment = await niobot.ImageAttachment.from_file(
+                    'file.webp',
+                    generate_blurhash=True
+                )
+                self.log.info("Generated thumbnail: %r", attachment)
+                await ctx.respond(
+                    "thumbnail.webp",
+                    file=attachment
+                )

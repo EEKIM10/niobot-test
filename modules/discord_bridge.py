@@ -3,6 +3,7 @@ import collections
 import datetime
 import io
 import json
+import aiosqlite
 
 import PIL.Image
 import websockets
@@ -27,6 +28,30 @@ class QuoteModule(niobot.Module):
         self.last_author_ts = 0
         self.bridge_responses = collections.deque(maxlen=100)
         self.bridge_lock = asyncio.Lock()
+
+    async def get_mxc_for(self, avatar_url: str) -> str:
+        async with aiosqlite.connect("avatars.db") as connection:
+            await connection.execute("CREATE TABLE IF NOT EXISTS avatars (url TEXT PRIMARY KEY, mxc TEXT)")
+            await connection.commit()
+            async with connection.execute("SELECT mxc FROM avatars WHERE url = ?", (avatar_url,)) as cursor:
+                row = await cursor.fetchone()
+                if row is not None:
+                    self.log.info("Avatar %r is cached, returning %r", avatar_url, row[0])
+                    return row[0]
+                self.log.info("Avatar %r is not cached, uploading.")
+                async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
+                    async with client.get(avatar_url) as response:
+                        response.raise_for_status()
+                        with tempfile.NamedTemporaryFile() as tmp:
+                            tmp.write(await response.read())
+                            tmp.flush()
+                            tmp.seek(0)
+                            media = await niobot.ImageAttachment.from_file(tmp.name)
+                            await media.upload(self.bot, False)
+                            await connection.execute("INSERT INTO avatars (url, mxc) VALUES (?, ?)",
+                                                     (avatar_url, media.url))
+                            await connection.commit()
+                            return media.url
 
     async def message_poller(self):
         if not DISCORD_BRIDGE_TOKEN:
@@ -61,7 +86,16 @@ class QuoteModule(niobot.Module):
                                     args = (payload["content"],)
                                 else:
                                     text = "**%s**:<br><blockquote>%s</blockquote>"
-                                    args = (payload["author"], payload["content"])
+                                    if payload.get("avatar"):
+                                        avatar_url = payload["avatar"]
+                                        avatar_mxc = await self.get_mxc_for(avatar_url)
+                                        _resolved_author = '<img src="%s" width="32" height="32"> %s' % (
+                                            avatar_mxc,
+                                            payload["author"]
+                                        )
+                                    else:
+                                        _resolved_author = payload["author"]
+                                    args = (_resolved_author, payload["content"])
                                 y = await self.bot.send_message(
                                     room,
                                     text % args,
