@@ -37,24 +37,24 @@ class QuoteModule(niobot.Module):
             async with connection.execute("SELECT mxc FROM avatars WHERE url = ?", (avatar_url,)) as cursor:
                 row = await cursor.fetchone()
                 if row is not None:
-                    self.log.info("Avatar %r is cached, returning %r", avatar_url, row[0])
+                    self.log.debug("Avatar %r is cached, returning %r", avatar_url, row[0])
                     return row[0]
-                self.log.info("Avatar %r is not cached, uploading.")
-                async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
-                    async with client.get(avatar_url) as response:
-                        response.raise_for_status()
-                        content_type = response.headers["Content-Type"].split(";")[0].split("/")[1]
-                        with tempfile.NamedTemporaryFile(suffix="." + content_type) as tmp:
-                            tmp.write(await response.read())
-                            tmp.flush()
-                            await niobot.run_blocking(self.make_image_round, pathlib.Path(tmp.name))
-                            tmp.seek(0)
-                            media = await niobot.ImageAttachment.from_file(tmp.name)
-                            await media.upload(self.bot, False)
-                            await connection.execute("INSERT INTO avatars (url, mxc) VALUES (?, ?)",
-                                                     (avatar_url, media.url))
-                            await connection.commit()
-                            return media.url
+            self.log.info("Avatar %r is not cached, uploading.", avatar_url)
+            async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
+                async with client.get(avatar_url) as response:
+                    response.raise_for_status()
+                    content_type = response.headers["Content-Type"].split(";")[0].split("/")[1]
+                    with tempfile.NamedTemporaryFile(suffix="." + content_type) as tmp:
+                        tmp.write(await response.read())
+                        tmp.flush()
+                        await niobot.run_blocking(self.make_image_round, pathlib.Path(tmp.name))
+                        tmp.seek(0)
+                        media = await niobot.ImageAttachment.from_file(tmp.name)
+                        await media.upload(self.bot, False)
+                        await connection.execute("INSERT INTO avatars (url, mxc) VALUES (?, ?)",
+                                                 (avatar_url, media.url))
+                        await connection.commit()
+                        return media.url
 
     @staticmethod
     def make_image_round(path: pathlib.Path) -> pathlib.Path:
@@ -67,6 +67,7 @@ class QuoteModule(niobot.Module):
         draw.ellipse((0, 0) + img.size, fill=255)
 
         img.putalpha(mask)
+        img.thumbnail((32, 32), PIL.Image.Resampling.LANCZOS, 3)
         img.save(path)
         return path
 
@@ -108,7 +109,7 @@ class QuoteModule(niobot.Module):
                                     if payload.get("avatar"):
                                         avatar_url = payload["avatar"]
                                         avatar_mxc = await self.get_mxc_for(avatar_url)
-                                        _resolved_author = '<img src="%s" width="1.2em" height="1.2em"> %s' % (
+                                        _resolved_author = '<img src="%s" width="16px" height="16px"> %s' % (
                                             avatar_mxc,
                                             payload["author"]
                                         )
