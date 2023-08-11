@@ -43,7 +43,8 @@ class QuoteModule(niobot.Module):
                 async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
                     async with client.get(avatar_url) as response:
                         response.raise_for_status()
-                        with tempfile.NamedTemporaryFile() as tmp:
+                        content_type = response.headers["Content-Type"].split(";")[0].split("/")[1]
+                        with tempfile.NamedTemporaryFile(suffix="." + content_type) as tmp:
                             tmp.write(await response.read())
                             tmp.flush()
                             await niobot.run_blocking(self.make_image_round, pathlib.Path(tmp.name))
