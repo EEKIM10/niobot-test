@@ -85,19 +85,19 @@ class QuoteModule(niobot.Module):
                                 pre_render = await self.bot._markdown_to_html(payload["content"])
                                 if _author == payload["author"]:
                                     text = "<blockquote>%s</blockquote>"
-                                    args = (payload["content"],)
+                                    args = (pre_render,)
                                 else:
                                     text = "**%s**:<br><blockquote>%s</blockquote>"
                                     if payload.get("avatar"):
                                         avatar_url = payload["avatar"]
                                         avatar_mxc = await self.get_mxc_for(avatar_url)
-                                        _resolved_author = '<img src="%s" width="24" height="24"> %s' % (
+                                        _resolved_author = '<img src="%s" width="1.5em" height="1.5em"> %s' % (
                                             avatar_mxc,
                                             payload["author"]
                                         )
                                     else:
                                         _resolved_author = payload["author"]
-                                    args = (_resolved_author, payload["content"])
+                                    args = (_resolved_author, pre_render)
                                 y = await self.bot.send_message(
                                     room,
                                     text % args,
