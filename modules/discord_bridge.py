@@ -89,7 +89,7 @@ class QuoteModule(niobot.Module):
                                     if payload.get("avatar"):
                                         avatar_url = payload["avatar"]
                                         avatar_mxc = await self.get_mxc_for(avatar_url)
-                                        _resolved_author = '<img src="%s" width="32" height="32"> %s' % (
+                                        _resolved_author = '<img src="%s" width="16" height="16"> %s' % (
                                             avatar_mxc,
                                             payload["author"]
                                         )
