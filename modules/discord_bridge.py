@@ -81,6 +81,8 @@ class QuoteModule(niobot.Module):
                             self.last_author = payload["author"]
                             self.last_author_ts = payload["at"]
                             if payload["content"]:
+                                # noinspection PyProtectedMember
+                                pre_render = await self.bot._markdown_to_html(payload["content"])
                                 if _author == payload["author"]:
                                     text = "<blockquote>%s</blockquote>"
                                     args = (payload["content"],)
@@ -89,7 +91,7 @@ class QuoteModule(niobot.Module):
                                     if payload.get("avatar"):
                                         avatar_url = payload["avatar"]
                                         avatar_mxc = await self.get_mxc_for(avatar_url)
-                                        _resolved_author = '<img src="%s" width="16" height="16"> %s' % (
+                                        _resolved_author = '<img src="%s" width="24" height="24"> %s' % (
                                             avatar_mxc,
                                             payload["author"]
                                         )
