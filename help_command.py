@@ -3,7 +3,6 @@ import niobot
 from niobot.utils.help_command import *
 
 
-
 async def custom_help(ctx: niobot.Context, command_name: str = None):
     """Displays help about a command."""
     if command_name is not None:

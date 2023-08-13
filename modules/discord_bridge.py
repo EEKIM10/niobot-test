@@ -4,6 +4,7 @@ import datetime
 import io
 import json
 import aiosqlite
+import hashlib
 
 import PIL.Image
 import PIL.ImageDraw
@@ -29,9 +30,11 @@ class QuoteModule(niobot.Module):
         self.last_author_ts = 0
         self.bridge_responses = collections.deque(maxlen=100)
         self.bridge_lock = asyncio.Lock()
+        self.processing = {}
 
     async def get_mxc_for(self, avatar_url: str) -> str:
-        async with aiosqlite.connect("avatars.db") as connection:
+        loc = pathlib.Path.home() / ".cache" / "jimmy-matrix" / "avatars.db"
+        async with aiosqlite.connect(loc) as connection:
             await connection.execute("CREATE TABLE IF NOT EXISTS avatars (url TEXT PRIMARY KEY, mxc TEXT)")
             await connection.commit()
             async with connection.execute("SELECT mxc FROM avatars WHERE url = ?", (avatar_url,)) as cursor:
@@ -86,14 +89,33 @@ class QuoteModule(niobot.Module):
                     ):
                         self.log.info("Connected to discord bridge & awaiting messages.")
                         async for payload in ws:
+                            payload_id = hashlib.md5(payload.encode("utf-8"), usedforsecurity=False).hexdigest()
+                            self.processing[payload_id] = {
+                                "state": "processing",
+                                "since": datetime.datetime.now(datetime.timezone.utc)
+                            }
                             self.log.debug("Decoding payload...")
                             try:
                                 payload = json.loads(payload)
                             except json.JSONDecodeError as e:
                                 self.log.exception("Error while decoding payload: %r", e, exc_info=e)
+                                self.processing[payload_id] = {
+                                    "state": "done",
+                                    "success": False,
+                                    "error": "JSONDecodeError",
+                                    "since": datetime.datetime.now(datetime.timezone.utc),
+                                    "history": self.processing[payload_id]
+                                }
                                 continue
                             self.log.info("Received bridge payload:\n%s", json.dumps(payload, indent=4))
                             if payload["author"] == "Jimmy Savile#3762":
+                                self.processing[payload_id] = {
+                                    "state": "done",
+                                    "success": False,
+                                    "error": "Ignored",
+                                    "since": datetime.datetime.now(datetime.timezone.utc),
+                                    "history": self.processing[payload_id]
+                                }
                                 continue
                             _author = self.last_author
                             y = None
@@ -109,6 +131,11 @@ class QuoteModule(niobot.Module):
                                     text = "**%s**:<br><blockquote>%s</blockquote>"
                                     if payload.get("avatar"):
                                         avatar_url = payload["avatar"]
+                                        self.processing[payload_id] = {
+                                            "state": "processing avatar",
+                                            "since": datetime.datetime.now(datetime.timezone.utc),
+                                            "history": self.processing[payload_id]
+                                        }
                                         avatar_mxc = await self.get_mxc_for(avatar_url)
                                         _resolved_author = '<img src="%s" width="16px" height="16px"> %s' % (
                                             avatar_mxc,
@@ -127,6 +154,12 @@ class QuoteModule(niobot.Module):
                             if payload["attachments"]:
                                 for attachment in payload["attachments"]:
                                     try:
+                                        self.processing[payload_id] = {
+                                            "state": "fetching attachment",
+                                            "url": attachment["url"],
+                                            "since": datetime.datetime.now(datetime.timezone.utc),
+                                            "history": self.processing[payload_id]
+                                        }
                                         async with client.get(attachment["url"]) as response:
                                             if response.status != 200:
                                                 continue
@@ -134,10 +167,24 @@ class QuoteModule(niobot.Module):
                                             with tempfile.NamedTemporaryFile(
                                                     suffix=pathlib.Path(attachment["url"]).suffix
                                             ) as tmp:
+                                                self.processing[payload_id] = {
+                                                    "state": "downloading attachment",
+                                                    "url": attachment["url"],
+                                                    "file": tmp.name,
+                                                    "since": datetime.datetime.now(datetime.timezone.utc),
+                                                    "history": self.processing[payload_id]
+                                                }
                                                 tmp.write(await response.read())
                                                 tmp.flush()
                                                 tmp.seek(0)
 
+                                                self.processing[payload_id] = {
+                                                    "state": "processing attachment",
+                                                    "url": attachment["url"],
+                                                    "file": tmp.name,
+                                                    "since": datetime.datetime.now(datetime.timezone.utc),
+                                                    "history": self.processing[payload_id]
+                                                }
                                                 if attachment["content_type"].startswith("image/"):
                                                     media = await niobot.ImageAttachment.from_file(
                                                         tmp.name,
@@ -190,6 +237,14 @@ class QuoteModule(niobot.Module):
                                                         continue
                                                     media = await factory.from_file(tmp.name)
 
+                                                self.processing[payload_id] = {
+                                                    "state": "uploading attachment",
+                                                    "url": attachment["url"],
+                                                    "file": tmp.name,
+                                                    "obj": media,
+                                                    "since": datetime.datetime.now(datetime.timezone.utc),
+                                                    "history": self.processing[payload_id]
+                                                }
                                                 x = await self.bot.send_message(
                                                     room,
                                                     'BRIDGE_' + attachment["filename"],
@@ -199,9 +254,30 @@ class QuoteModule(niobot.Module):
                                                 self.bridge_responses.append(x.event_id)
                                     except Exception as e:
                                         self.log.exception("Error while mirroring discord media: %r", e, exc_info=e)
+                                        self.processing[payload_id] = {
+                                            "state": "failed mirroring attachment attachment",
+                                            "url": attachment["url"],
+                                            "error": e,
+                                            "success": False,
+                                            "since": datetime.datetime.now(datetime.timezone.utc),
+                                            "history": self.processing[payload_id]
+                                        }
                                         continue
+                            self.processing[payload_id] = {
+                                "state": "done",
+                                "success": True,
+                                "since": datetime.datetime.now(datetime.timezone.utc),
+                                "history": self.processing[payload_id]
+                            }
             except Exception as e:
                 self.log.exception("Error while reading from websocket: %r", e, exc_info=e)
+                self.processing[payload_id] = {
+                    "state": "websocket error",
+                    "error": e,
+                    "success": False,
+                    "since": datetime.datetime.now(datetime.timezone.utc),
+                    "history": self.processing[payload_id]
+                }
                 continue
 
     # @niobot.event("message")
@@ -276,4 +352,18 @@ class QuoteModule(niobot.Module):
                 last_ts.strftime("%d/%m/%Y %H:%M:%S %Z")
             ),
         ]
+        processing = []
+        for key, data in self.processing.items():
+            if data.get("success") in (True, False):
+                continue
+            processing.append(
+                "* %s: %s, since %s" % (
+                    key,
+                    data["state"] + (" (%s)" % data["url"]) if data.get("url") else '',
+                    data["since"].strftime("%d/%m/%Y %H:%M:%S %Z")
+                )
+            )
+        if processing:
+            lines.append("\n")
+            lines.extend(processing)
         await ctx.respond("\n".join(lines))
