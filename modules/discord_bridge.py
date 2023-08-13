@@ -34,6 +34,7 @@ class QuoteModule(niobot.Module):
 
     async def get_mxc_for(self, avatar_url: str) -> str:
         loc = pathlib.Path.home() / ".cache" / "jimmy-matrix" / "avatars.db"
+        loc.parent.mkdir(0o751, True, True)
         async with aiosqlite.connect(loc) as connection:
             await connection.execute("CREATE TABLE IF NOT EXISTS avatars (url TEXT PRIMARY KEY, mxc TEXT)")
             await connection.commit()
