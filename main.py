@@ -106,7 +106,7 @@ async def kuma_ping_loop():
         if len(bot.ping_history):
             _ping = sum(bot.ping_history) / len(bot.ping_history)
         else:
-            _ping = 3.0
+            _ping = ""
         try:
             await session.get(
                 config.KUMA_URL.format(ping=round(_ping * 1000, 2))
