@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import pathlib
 import time
+import httpx
 from datetime import timedelta
 from pathlib import Path
 
@@ -99,6 +100,24 @@ bot.queue = BackgroundQueue()
 bot.ping_history = collections.deque(maxlen=100)
 
 
+async def kuma_ping_loop():
+    session = httpx.AsyncClient(follow_redirects=True)
+    while True:
+        if len(bot.ping_history):
+            _ping = sum(bot.ping_history) / len(bot.ping_history)
+        else:
+            _ping = 3.0
+        try:
+            await httpx.get(
+                config.KUMA_URL.format(ping=round(ping * 1000, 2))
+            )
+            bot.log.debug("pinged kuma.")
+        except Exception as e:
+            bot.log.error("Failed to ping kuma: %r", e, exc_info=e)
+        finally:
+            await asyncio.sleep(60)
+
+
 async def handle_key_verification_start(event: nio.KeyVerificationEvent):
     """Step 1"""
     if not isinstance(event, nio.KeyVerificationCancel):
@@ -137,6 +156,8 @@ async def on_ready(_: niobot.SyncResponse):
             if len(_members.members) == 1 and _members.members[0] == bot.user_id:
                 print("Leaving empty room:", room_id)
                 bot.queue.add(bot.room_leave(room_id))
+    if hasattr(config, "KUMA_URL"):
+        asyncio.create_task(kuma_ping_loop())
 
 
 @bot.on_event("command_error")
