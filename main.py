@@ -104,12 +104,12 @@ async def kuma_ping_loop():
     session = httpx.AsyncClient(follow_redirects=True)
     while True:
         if len(bot.ping_history):
-            _ping = sum(bot.ping_history) / len(bot.ping_history)
+            _ping = round((sum(bot.ping_history) / len(bot.ping_history)) * 1000, 2)
         else:
             _ping = ""
         try:
             await session.get(
-                config.KUMA_URL.format(ping=round(_ping * 1000, 2))
+                config.KUMA_URL.format(ping=_ping)
             )
             bot.log.debug("pinged kuma.")
         except Exception as e:
