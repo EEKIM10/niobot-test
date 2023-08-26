@@ -108,7 +108,7 @@ async def kuma_ping_loop():
         else:
             _ping = 3.0
         try:
-            await httpx.get(
+            await session.get(
                 config.KUMA_URL.format(ping=round(_ping * 1000, 2))
             )
             bot.log.debug("pinged kuma.")
