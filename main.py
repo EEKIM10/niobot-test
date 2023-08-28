@@ -104,7 +104,7 @@ async def kuma_ping_loop():
     session = httpx.AsyncClient(follow_redirects=True)
     while True:
         if len(bot.ping_history):
-            _ping = round((sum(bot.ping_history) / len(bot.ping_history)) * 1000, 2)
+            _ping = round((sum(bot.ping_history) / len(bot.ping_history)), 2)
         else:
             _ping = ""
         try:
