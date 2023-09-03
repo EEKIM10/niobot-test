@@ -24,7 +24,8 @@ from niobot import Context, NioBotException
 import help_command
 
 os.chdir(pathlib.Path(__file__).parent.absolute())
-sys.path.append("./venv/bin")
+if not os.path.exists("./venv"):
+    sys.path.append("./venv/bin")
 logging.basicConfig(level=getattr(config, "LOG_LEVEL", logging.INFO))
 logging.getLogger("peewee").setLevel(logging.WARNING)
 logging.getLogger("nio.rooms").setLevel(logging.ERROR)
