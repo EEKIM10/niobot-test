@@ -308,7 +308,7 @@ async def version(ctx: Context, simple: bool = False):
             await ctx.respond("`niocli` is not installed (Version too old? PATH issue?)\n"
                               "Might be an ancient build, there's no \\_\\_version\\_\\_ either.")
         else:
-            URL = "https://github.com/EEKIM10/nio-bot"
+            URL = "https://github.com/nexy7574/nio-bot"
             await ctx.respond(
                 "Running [nio-bot]({0}) version [{2}]({0}/tree/{1}).".format(
                     URL,
