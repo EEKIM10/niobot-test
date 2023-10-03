@@ -12,7 +12,7 @@ class QuoteModule(niobot.Module):
         self.lock = asyncio.Lock()
 
     @niobot.command("quote", aliases=['q'])
-    async def quote(self, ctx: niobot.Context):
+    async def quote(self, ctx: niobot.Context, verbose: bool = False):
         """Generate a random quote.
         
         The source is https://inspirobot.me/"""
@@ -42,7 +42,7 @@ class QuoteModule(niobot.Module):
                     await ctx.respond(url, file=attachment)
                     end = time.time()
                     ul_time = (end - start)
-                    if '--verbose' in ctx.args:
+                    if verbose:
                         await msg.edit(
                             "Response times:\n* Generate: {:,.2f}ms\n* Download: {:,.2f}ms\n* Upload: {:,.2f}ms".format(
                                 gen_time * 1000,

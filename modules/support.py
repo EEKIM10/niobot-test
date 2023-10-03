@@ -46,11 +46,11 @@ class SupportRoomModule(niobot.Module):
         )
         self.last_etag = None
         self.next_run = datetime.datetime.utcnow()
-        self.log = logging.getLogger(__name__)
+        self._log = logging.getLogger(__name__)
         self.task = asyncio.create_task(self.github_task())
         self.db_lock = asyncio.Lock()
         if auth_getter():
-            self.log.info("Using GitHub PAT for API requests.")
+            self._log.info("Using GitHub PAT for API requests.")
 
     @staticmethod
     def version_is_newer(a: str, b: str) -> bool:
@@ -84,9 +84,9 @@ class SupportRoomModule(niobot.Module):
                     self.last_etag = response.headers["etag"]
                     data = response.json()
             except httpx.HTTPStatusError as e:
-                self.log.warning("Failed to fetch latest release data from GitHub: %s", e)
+                self._log.warning("Failed to fetch latest release data from GitHub: %s", e)
             except httpx.HTTPError as e:
-                self.log.error("Failed to fetch latest release data from GitHub: %s", e, exc_info=e)
+                self._log.error("Failed to fetch latest release data from GitHub: %s", e, exc_info=e)
             else:
                 if data is not None:
                     version = data["tag_name"]
@@ -102,14 +102,14 @@ class SupportRoomModule(niobot.Module):
                         newer = self.version_is_newer(version, old_version)
 
                         if version != old_version:
-                            self.log.info("Updating topic version from %s to %s", old_version, version)
+                            self._log.info("Updating topic version from %s to %s", old_version, version)
                             topic = "Current version: %s | %s" % (version, topic)
                             response = await self.bot.update_room_topic(self.ROOM_ID, topic)
                             if not isinstance(response, niobot.RoomPutStateResponse):
-                                self.log.warning("Failed to update topic: %s", response)
+                                self._log.warning("Failed to update topic: %s", response)
                             else:
                                 if newer:
-                                    self.log.info("Updated topic. Notifying room.")
+                                    self._log.info("Updated topic. Notifying room.")
                                     try:
                                         msg_plain = "@room New version of niobot is available! %s (changelog: %s)" % (
                                             version,
@@ -138,13 +138,13 @@ class SupportRoomModule(niobot.Module):
                                         if not isinstance(response, niobot.RoomSendResponse):
                                             raise niobot.MessageException(response=response)
                                     except niobot.MessageException as e:
-                                        self.log.error("Failed to notify room: %s", e, exc_info=e)
+                                        self._log.error("Failed to notify room: %s", e, exc_info=e)
                                 else:
-                                    self.log.info(f"Updated topic. Not notifying room ({version} < {old_version}).")
+                                    self._log.info(f"Updated topic. Not notifying room ({version} < {old_version}).")
                         else:
-                            self.log.info("Version is up to date")
+                            self._log.info("Version is up to date")
                     else:
-                        self.log.warning("Failed to find room %s", self.ROOM_ID)
+                        self._log.warning("Failed to find room %s", self.ROOM_ID)
             self.next_run = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
             await asyncio.sleep(1800)  # every half an hour
 
