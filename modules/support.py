@@ -26,7 +26,7 @@ def auth_getter():
 class SupportRoomModule(niobot.Module):
     ROOM_ID = "!LlxsraKrMIwxkqBXwE:nexy7574.co.uk"
     PYPI_API_URL = "https://pypi.org/pypi/nio-bot/json"
-    GITHUB_API_URL = "https://api.github.com/repos/EEKIM10/niobot/releases/latest"
+    GITHUB_API_URL = "https://api.github.com/repos/nexy7574/niobot/releases/latest"
     MSC_REGEX = re.compile(
         r"\[MSC(\d+)]",
         re.IGNORECASE
@@ -228,7 +228,7 @@ class SupportRoomModule(niobot.Module):
         gh_links = []
         repos = {
             "nio": "poljar/matrix-nio",
-            "niobot": "EEKIM10/niobot",
+            "niobot": "nexy7574/niobot",
         }
         for gh_match in self.GH_REGEX.finditer(message.body):
             if gh_match.group(1) in repos:
