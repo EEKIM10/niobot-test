@@ -24,7 +24,7 @@ def auth_getter():
 
 
 class SupportRoomModule(niobot.Module):
-    ROOM_ID = "!LlxsraKrMIwxkqBXwE:nexy7574.co.uk"
+    ROOM_ID = "!rwJEulKnHLoffvXAof:nexy7574.co.uk"
     PYPI_API_URL = "https://pypi.org/pypi/nio-bot/json"
     GITHUB_API_URL = "https://api.github.com/repos/nexy7574/niobot/releases/latest"
     MSC_REGEX = re.compile(
