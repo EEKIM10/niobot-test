@@ -1,4 +1,6 @@
 import asyncio
+import io
+import re
 import time
 
 import niobot
@@ -52,3 +54,35 @@ class QuoteModule(niobot.Module):
                         )
                     else:
                         await msg.delete("command completed")
+
+    @niobot.command(name="xkcd")
+    async def xkcd_command(self, ctx: niobot.Context, comic_number: int = None):
+        """Fetches an XKCD comic.
+
+        If none is provided, a random one is chosen."""
+        session = httpx.AsyncClient()
+        if comic_number is None:
+            response = await session.get("https://c.xkcd.com/random/comic/", follow_redirects=False)
+            if response.status_code != 302:
+                await ctx.respond("Unable to fetch a random comic (HTTP %d)" % response.status_code)
+                return
+            comic_number = int(response.headers["location"].split("/")[2])
+
+        response = await session.get("https://xkcd.com/%d/info.0.json" % comic_number)
+        if response.status_code != 200:
+            await ctx.respond("Unable to fetch comic %d (HTTP %d)" % (comic_number, response.status_code))
+            return
+
+        data = response.json()
+        download = await session.get(data["img"])
+        if download.status_code != 200:
+            await ctx.respond("Unable to download comic %d (HTTP %d)" % (comic_number, download.status_code))
+            return
+
+        with tempfile.NamedTemporaryFile("wb", prefix="xkcd-comic-", suffix=".png") as file:
+            file.write(download.content)
+            file.flush()
+            file.seek(0)
+            fn = re.sub(r'[^\w\d-]', '_', data['safe_title']) + ".png"
+            attachment = await niobot.ImageAttachment.from_file(file.name)
+            await ctx.respond(data["alt"], file=attachment)
