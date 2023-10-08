@@ -66,7 +66,7 @@ class QuoteModule(niobot.Module):
             if response.status_code != 302:
                 await ctx.respond("Unable to fetch a random comic (HTTP %d)" % response.status_code)
                 return
-            comic_number = int(response.headers["location"].split("/")[2])
+            comic_number = re.match(r"https://xkcd.com/(\d+)/", response.headers["Location"]).group(1)
 
         response = await session.get("https://xkcd.com/%d/info.0.json" % comic_number)
         if response.status_code != 200:
