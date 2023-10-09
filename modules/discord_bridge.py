@@ -123,7 +123,14 @@ class QuoteModule(niobot.Module):
                                     text = "**%s**:<br><blockquote>%s</blockquote>"
                                     if payload.get("avatar"):
                                         avatar_url = payload["avatar"]
-                                        avatar_mxc = await self.get_mxc_for(avatar_url)
+                                        try:
+                                            avatar_mxc = await self.get_mxc_for(avatar_url)
+                                        except aiohttp.ClientError:
+                                            avatar_mxc = await self.get_mxc_for(
+                                                "https://cdn.discordapp.com/embed/avatars/%d.png" % (
+                                                    min(max(0, (payload["at"] >> 22) % 6), 5)
+                                                )
+                                            )
                                         log.info("Avatar for %r resolved to %r", avatar_url, avatar_mxc)
                                         _resolved_author = '<img src="%s" width="16px" height="16px"> %s' % (
                                             avatar_mxc,
