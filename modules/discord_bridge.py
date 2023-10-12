@@ -33,7 +33,7 @@ class QuoteModule(niobot.Module):
         self.bridge_responses = collections.deque(maxlen=100)
         self.bridge_lock = asyncio.Lock()
         self.processing = {}
-        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
+        self._log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
 
     async def get_mxc_for(self, avatar_url: str) -> str:
         loc = pathlib.Path.home() / ".cache" / "jimmy-matrix" / "avatars.db"
@@ -44,9 +44,9 @@ class QuoteModule(niobot.Module):
             async with connection.execute("SELECT mxc FROM avatars WHERE url = ?", (avatar_url,)) as cursor:
                 row = await cursor.fetchone()
                 if row is not None:
-                    self.log.debug("Avatar %r is cached, returning %r", avatar_url, row[0])
+                    self._log.debug("Avatar %r is cached, returning %r", avatar_url, row[0])
                     return row[0]
-            self.log.info("Avatar %r is not cached, uploading.", avatar_url)
+            self._log.info("Avatar %r is not cached, uploading.", avatar_url)
             async with aiohttp.ClientSession(headers={"User-Agent": niobot.__user_agent__}) as client:
                 async with client.get(avatar_url) as response:
                     response.raise_for_status()
