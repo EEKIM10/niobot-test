@@ -159,7 +159,10 @@ async def on_ready(_: niobot.SyncResponse):
                 print("Leaving empty room:", room_id)
                 bot.queue.add(bot.room_leave(room_id))
     if hasattr(config, "KUMA_URL"):
+        bot.log.info("starting Uptime Kuma ping loop")
         asyncio.create_task(kuma_ping_loop())
+    else:
+        bot.log.warning("No KUMA_URL environment variable specified, will not be updating Uptime Kuma.")
 
 
 @bot.on_event("command_error")
